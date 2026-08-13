@@ -137,6 +137,16 @@
             <a class="download-link" id="downloadLink" hidden>Download</a>
           </div>
           <canvas id="previewCanvas" class="preview-canvas"></canvas>
+          <section class="video-player" id="videoPlayerPanel" aria-label="Timelapse video player" hidden>
+            <div class="video-player-head">
+              <div>
+                <p class="eyebrow">Timelapse Player</p>
+                <p class="video-player-title" id="videoPlayerTitle">No video</p>
+              </div>
+              <button class="ghost compact-button" id="restartVideoButton" type="button">Restart</button>
+            </div>
+            <video class="video-preview" id="videoPreview" controls preload="metadata"></video>
+          </section>
           <pre id="logOutput" class="log-output">Awaiting input.</pre>
         </section>
       </section>

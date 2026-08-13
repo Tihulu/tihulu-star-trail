@@ -15,6 +15,10 @@ const groupTitle = document.querySelector("#groupTitle");
 const statusChip = document.querySelector("#statusChip");
 const previewCanvas = document.querySelector("#previewCanvas");
 const downloadLink = document.querySelector("#downloadLink");
+const videoPlayerPanel = document.querySelector("#videoPlayerPanel");
+const videoPlayerTitle = document.querySelector("#videoPlayerTitle");
+const videoPreview = document.querySelector("#videoPreview");
+const restartVideoButton = document.querySelector("#restartVideoButton");
 const starfield = document.querySelector("#starfield");
 const editorTitle = document.querySelector("#editorTitle");
 const photoCounter = document.querySelector("#photoCounter");
@@ -45,6 +49,7 @@ let isBusy = false;
 let photoPreviewUrl = "";
 let photoPreviewFile = null;
 let canvasPreviewToken = 0;
+let currentOutputUrl = "";
 let photoStripKey = "";
 let undoStack = [];
 let editSelectionMode = false;
@@ -106,16 +111,40 @@ function setBusy(busy) {
 }
 
 function setDownload(url, filename) {
+  clearDownload();
+  currentOutputUrl = url;
   downloadLink.href = url;
   downloadLink.download = filename;
   downloadLink.hidden = false;
 }
 
 function clearDownload() {
-  if (downloadLink.href) URL.revokeObjectURL(downloadLink.href);
+  clearVideoPreview();
+  if (currentOutputUrl) URL.revokeObjectURL(currentOutputUrl);
+  currentOutputUrl = "";
   downloadLink.removeAttribute("href");
   downloadLink.removeAttribute("download");
   downloadLink.hidden = true;
+}
+
+function setVideoPreview(url, options, frameCount) {
+  if (!videoPreview || !videoPlayerPanel) return;
+  videoPreview.src = url;
+  videoPreview.load();
+  videoPlayerPanel.hidden = false;
+  if (videoPlayerTitle) {
+    videoPlayerTitle.textContent = `${options.videoLabel} / ${frameCount} frame(s) / ${options.fps} FPS`;
+  }
+}
+
+function clearVideoPreview() {
+  if (videoPreview) {
+    videoPreview.pause();
+    videoPreview.removeAttribute("src");
+    videoPreview.load();
+  }
+  if (videoPlayerPanel) videoPlayerPanel.hidden = true;
+  if (videoPlayerTitle) videoPlayerTitle.textContent = "No video";
 }
 
 function setSettingsInfoOpen(open) {
@@ -316,11 +345,13 @@ timelapseButton.addEventListener("click", async () => {
     const requestedOptions = settings();
     const options = supportedVideoOptions(requestedOptions, {announce: true});
     const result = await renderTimelapse(selected, options);
-    setDownload(URL.createObjectURL(result.blob), `tihulu-timelapse.${options.videoExtension}`);
+    const outputUrl = URL.createObjectURL(result.blob);
+    setDownload(outputUrl, `tihulu-timelapse.${options.videoExtension}`);
+    setVideoPreview(outputUrl, options, result.frameCount);
     const fallbackNote = requestedOptions.videoLabel === options.videoLabel
       ? ""
       : ` Requested ${requestedOptions.videoLabel}; used ${options.videoLabel} because this browser cannot record MP4.`;
-    log(`Timelapse ${options.videoLabel} ready from ${result.frameCount} decoded frame(s) at ${options.videoQualityMbps} Mbps.${fallbackNote}`);
+    log(`Timelapse ${options.videoLabel} ready from ${result.frameCount} decoded frame(s) at ${options.videoQualityMbps} Mbps. Use the player to seek, restart, or replay.${fallbackNote}`);
   } catch (error) {
     log(error.message || error);
   } finally {
@@ -330,6 +361,12 @@ timelapseButton.addEventListener("click", async () => {
 
 videoFormatSelect?.addEventListener("change", () => {
   updateVideoFormatSupport({announce: true});
+});
+
+restartVideoButton?.addEventListener("click", () => {
+  if (!videoPreview?.src) return;
+  videoPreview.currentTime = 0;
+  void videoPreview.play().catch(() => {});
 });
 
 settingsInfoButton?.addEventListener("click", () => {
