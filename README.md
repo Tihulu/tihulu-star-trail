@@ -26,7 +26,7 @@ curl -fsSL https://raw.githubusercontent.com/Tihulu/tihulu-star-trail/main/scrip
 
 The installer adds a launcher at `~/.local/bin/tihulu` and a Pop!_OS/GNOME application entry named **Tihulu Star Trail**. If `~/.local/bin` is not already on your `PATH`, run the command with the full path or add it to your shell profile.
 
-If `pyenv` is installed, the installer uses Python `3.12.8` from pyenv and installs Python dependencies with pip. If `pyenv` is not installed, it uses native Debian packages through apt. Pyenv itself may need system build dependencies the first time it compiles Python.
+If `pyenv` is installed in your `PATH` or at `~/.pyenv`, the installer uses Python `3.12.8` from pyenv and installs all Python dependencies with pip: `opencv-python-headless`, `numpy`, `Pillow`, and `rawpy`. If `pyenv` is not installed, it uses native Debian packages through apt where possible and installs `rawpy` with pip. Pyenv itself may need system build dependencies the first time it compiles Python. The installer also verifies that `cv2`, `numpy`, `PIL`, and `rawpy` import successfully before it finishes.
 
 From inside a cloned repository, you can run the same installer locally:
 
@@ -44,6 +44,7 @@ cd tihulu-star-trail
 python3 -m venv --system-site-packages .venv
 . .venv/bin/activate
 pip install -e . --no-deps
+pip install rawpy
 ```
 
 Optional pyenv setup:
@@ -53,6 +54,7 @@ pyenv install 3.12.8
 pyenv local 3.12.8
 python -m venv .venv
 . .venv/bin/activate
+python -m pip install --upgrade pip setuptools wheel
 pip install -e .
 ```
 

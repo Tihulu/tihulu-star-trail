@@ -5,6 +5,11 @@ REPO_URL=${TIHULU_REPO_URL:-https://github.com/Tihulu/tihulu-star-trail.git}
 INSTALL_DIR=${TIHULU_INSTALL_DIR:-$HOME/tihulu-star-trail}
 BIN_DIR=${TIHULU_BIN_DIR:-$HOME/.local/bin}
 PYENV_VERSION=${TIHULU_PYTHON_VERSION:-3.12.8}
+PYENV_ROOT=${PYENV_ROOT:-$HOME/.pyenv}
+
+if ! command -v pyenv >/dev/null 2>&1 && [ -x "$PYENV_ROOT/bin/pyenv" ]; then
+  export PATH="$PYENV_ROOT/bin:$PYENV_ROOT/shims:$PATH"
+fi
 
 if command -v pyenv >/dev/null 2>&1; then
   if ! pyenv versions --bare | grep -qx "$PYENV_VERSION"; then
@@ -60,14 +65,57 @@ else
   PROJECT_DIR=$INSTALL_DIR
 fi
 
-"$PYTHON_BIN" -m venv --system-site-packages "$PROJECT_DIR/.venv"
-. "$PROJECT_DIR/.venv/bin/activate"
+VENV_DIR="$PROJECT_DIR/.venv"
+
+venv_is_usable() {
+  [ -x "$VENV_DIR/bin/python" ] || return 1
+  "$VENV_DIR/bin/python" -c 'import math, pathlib' >/dev/null 2>&1 || return 1
+
+  target_prefix=$("$PYTHON_BIN" -c 'import os, sys; print(os.path.realpath(sys.prefix))') || return 1
+  venv_base_prefix=$("$VENV_DIR/bin/python" -c 'import os, sys; print(os.path.realpath(sys.base_prefix))') || return 1
+  [ "$venv_base_prefix" = "$target_prefix" ] || return 1
+
+  grep -q '^include-system-site-packages = true$' "$VENV_DIR/pyvenv.cfg" || return 1
+}
+
+if [ -d "$VENV_DIR" ] && ! venv_is_usable; then
+  echo "Rebuilding incompatible virtual environment: $VENV_DIR"
+  rm -rf "$VENV_DIR"
+fi
+
+if [ ! -x "$VENV_DIR/bin/python" ]; then
+  "$PYTHON_BIN" -m venv --system-site-packages "$VENV_DIR"
+fi
+
+. "$VENV_DIR/bin/activate"
 if [ "$INSTALL_DEPS" -eq 1 ]; then
+  python -m pip install --upgrade pip setuptools wheel
   python -m pip install -e "$PROJECT_DIR"
 else
   python -m pip install -e "$PROJECT_DIR" --no-deps
   python -m pip install rawpy
 fi
+
+python - <<'PYDEPS'
+import importlib
+
+modules = {
+    "cv2": "opencv-python-headless or python3-opencv",
+    "numpy": "numpy or python3-numpy",
+    "PIL": "Pillow or python3-pillow",
+    "rawpy": "rawpy",
+}
+missing = []
+for module, package in modules.items():
+    try:
+        importlib.import_module(module)
+    except Exception as error:  # pragma: no cover - install-time diagnostic
+        missing.append(f"{module} ({package}): {error}")
+
+if missing:
+    raise SystemExit("Missing Tihulu dependency imports:\n" + "\n".join(missing))
+print("Verified Python dependencies: cv2, numpy, PIL, rawpy")
+PYDEPS
 
 mkdir -p "$BIN_DIR"
 {
