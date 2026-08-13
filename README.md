@@ -178,7 +178,7 @@ RAW support uses `rawpy` and covers common camera formats such as `.cr2`, `.cr3`
 
 ## GitHub Pages
 
-The static web app lives in `docs/` and is deployed by `.github/workflows/pages.yml` using GitHub Actions. The hosted app is configured for `https://tihulu.github.io/tihulu-star-trail/`.
+The static web app lives in `docs/` and is deployed by `.github/workflows/pages.yml` using GitHub Actions. The hosted app is configured for `https://tihulu.github.io/tihulu-star-trail/`. Browser exports include PNG/JPEG image quality controls and a WebM video bitrate control.
 
 ## Development
 

@@ -21,11 +21,20 @@ function log(lines) {
 }
 
 function settings() {
+  const imageFormat = document.querySelector("#imageFormat").value;
+  const imageQuality = clamp(Number(document.querySelector("#imageQuality").value), 1, 100);
+  const videoQualityMbps = clamp(Number(document.querySelector("#videoQuality").value), 0.5, 50);
   return {
     threshold: Number(document.querySelector("#threshold").value),
     thumbSide: Number(document.querySelector("#thumbSide").value),
     maxSide: Number(document.querySelector("#maxSide").value),
-    fps: Number(document.querySelector("#fps").value)
+    imageFormat,
+    imageQuality,
+    imageQualityRatio: imageQuality / 100,
+    imageExtension: imageFormat === "image/jpeg" ? "jpg" : "png",
+    fps: Number(document.querySelector("#fps").value),
+    videoQualityMbps,
+    videoBitsPerSecond: Math.round(videoQualityMbps * 1000000)
   };
 }
 
@@ -107,9 +116,10 @@ trailButton.addEventListener("click", async () => {
   setBusy(true);
   clearDownload();
   try {
-    const blob = await renderTrail(selected, settings());
-    setDownload(URL.createObjectURL(blob), "tihulu-star-trail.png");
-    log(`Trail ready from ${selected.length} frame(s).`);
+    const options = settings();
+    const blob = await renderTrail(selected, options);
+    setDownload(URL.createObjectURL(blob), `tihulu-star-trail.${options.imageExtension}`);
+    log(`Trail ready from ${selected.length} frame(s) at ${options.imageFormat.split("/")[1].toUpperCase()} quality ${options.imageQuality}.`);
   } catch (error) {
     log(error.message || error);
   } finally {
@@ -123,9 +133,10 @@ timelapseButton.addEventListener("click", async () => {
   setBusy(true);
   clearDownload();
   try {
-    const blob = await renderTimelapse(selected, settings());
+    const options = settings();
+    const blob = await renderTimelapse(selected, options);
     setDownload(URL.createObjectURL(blob), "tihulu-timelapse.webm");
-    log(`Timelapse ready from ${selected.length} frame(s).`);
+    log(`Timelapse ready from ${selected.length} frame(s) at ${options.videoQualityMbps} Mbps.`);
   } catch (error) {
     log(error.message || error);
   } finally {
@@ -271,8 +282,8 @@ async function renderTrail(selected, options) {
 
   return new Promise((resolve, reject) => previewCanvas.toBlob((blob) => {
     if (blob) resolve(blob);
-    else reject(new Error("Could not create PNG output."));
-  }, "image/png"));
+    else reject(new Error("Could not create image output."));
+  }, options.imageFormat, options.imageQualityRatio));
 }
 
 async function renderTimelapse(selected, options) {
@@ -285,7 +296,10 @@ async function renderTimelapse(selected, options) {
   const ctx = previewCanvas.getContext("2d");
   const stream = previewCanvas.captureStream(options.fps);
   const mimeType = MediaRecorder.isTypeSupported("video/webm;codecs=vp9") ? "video/webm;codecs=vp9" : "video/webm";
-  const recorder = new MediaRecorder(stream, {mimeType});
+  const recorder = new MediaRecorder(stream, {
+    mimeType,
+    videoBitsPerSecond: options.videoBitsPerSecond
+  });
   const chunks = [];
   recorder.addEventListener("dataavailable", (event) => {
     if (event.data.size) chunks.push(event.data);
@@ -340,6 +354,11 @@ function contain(width, height, side) {
     width: targetWidth,
     height: targetHeight
   };
+}
+
+function clamp(value, min, max) {
+  if (Number.isNaN(value)) return min;
+  return Math.min(Math.max(value, min), max);
 }
 
 function createWorkCanvas(width, height) {

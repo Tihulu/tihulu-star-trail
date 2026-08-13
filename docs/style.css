@@ -156,7 +156,8 @@ h2 {
   text-transform: uppercase;
 }
 
-input {
+input,
+select {
   width: 100%;
   min-height: 42px;
   border: 1px solid rgba(147, 168, 184, 0.28);
@@ -168,7 +169,8 @@ input {
   outline: none;
 }
 
-input:focus {
+input:focus,
+select:focus {
   border-color: var(--pink);
   box-shadow: 0 0 0 3px rgba(255, 43, 214, 0.16);
 }
