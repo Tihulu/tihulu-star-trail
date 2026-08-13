@@ -7,7 +7,9 @@ The grouping step uses OpenCV feature matching and a RANSAC homography check. In
 ## Features
 
 - Recursively scans an SD card or photo folder.
-- Opens a local dark interface with `tihulu ui`.
+- Opens a native Debian/Pop!_OS desktop app with `tihulu desktop`.
+- Keeps the local browser interface available with `tihulu ui`.
+- Includes a static GitHub Pages web app for browser-readable photo sets.
 - Groups images by likely camera angle.
 - Writes a JSON manifest with group scores and source paths.
 - Creates star trails with a lighten blend, which is the classic pixel-wise maximum stack.
@@ -24,9 +26,9 @@ One-line install:
 curl -fsSL https://raw.githubusercontent.com/Tihulu/tihulu-star-trail/main/scripts/install-debian.sh | sh
 ```
 
-The installer adds a launcher at `~/.local/bin/tihulu` and a Pop!_OS/GNOME application entry named **Tihulu Star Trail**. If `~/.local/bin` is not already on your `PATH`, run the command with the full path or add it to your shell profile.
+The installer adds a launcher at `~/.local/bin/tihulu` and a Pop!_OS/GNOME application entry named **Tihulu Star Trail**. That launcher opens the native Linux desktop app. If `~/.local/bin` is not already on your `PATH`, run the command with the full path or add it to your shell profile.
 
-If `pyenv` is installed in your `PATH` or at `~/.pyenv`, the installer uses Python `3.12.8` from pyenv and installs all Python dependencies with pip: `opencv-python-headless`, `numpy`, `Pillow`, and `rawpy`. If `pyenv` is not installed, it uses native Debian packages through apt where possible and installs `rawpy` with pip. Pyenv itself may need system build dependencies the first time it compiles Python. The installer also verifies that `cv2`, `numpy`, `PIL`, and `rawpy` import successfully before it finishes.
+If `pyenv` is installed in your `PATH` or at `~/.pyenv`, the installer uses Python `3.12.8` from pyenv and installs all Python dependencies with pip: `opencv-python-headless`, `numpy`, `Pillow`, and `rawpy`. The installer also installs small Debian desktop packages when apt is available: `python3-tk`, `tk-dev`, and `xdg-utils`. If `pyenv` is not installed, it uses native Debian packages through apt where possible and installs `rawpy` with pip. Pyenv itself may need system build dependencies the first time it compiles Python. The installer verifies that `cv2`, `numpy`, `PIL`, `rawpy`, and `tkinter` import successfully before it finishes.
 
 From inside a cloned repository, you can run the same installer locally:
 
@@ -38,7 +40,7 @@ Or install the native Debian packages manually:
 
 ```bash
 sudo apt update
-sudo apt install -y git python3 python3-venv python3-pip python3-opencv python3-numpy python3-pillow
+sudo apt install -y git python3 python3-venv python3-pip python3-opencv python3-numpy python3-pillow python3-tk tk-dev xdg-utils
 git clone https://github.com/Tihulu/tihulu-star-trail.git
 cd tihulu-star-trail
 python3 -m venv --system-site-packages .venv
@@ -50,6 +52,7 @@ pip install rawpy
 Optional pyenv setup:
 
 ```bash
+sudo apt install -y python3-tk tk-dev xdg-utils
 pyenv install 3.12.8
 pyenv local 3.12.8
 python -m venv .venv
@@ -68,10 +71,22 @@ pip install -e .
 
 ## Quick Start
 
-Open the local interface from Applications by launching **Tihulu Star Trail**, or from a terminal:
+Open the native app from Applications by launching **Tihulu Star Trail**, or from a terminal:
 
 ```bash
-tihulu ui
+tihulu desktop
+```
+
+Open the local browser interface instead:
+
+```bash
+tihulu ui --open
+```
+
+Open the hosted web app:
+
+```text
+https://tihulu.github.io/tihulu-star-trail/
 ```
 
 Run grouping and star-trail creation in one command:
@@ -157,7 +172,11 @@ The default threshold is `0.32`. Most real night-sky sets will need a little tun
 
 ## RAW Files
 
-RAW support uses `rawpy` and covers common camera formats such as `.cr2`, `.cr3`, `.nef`, `.arw`, `.dng`, `.orf`, `.rw2`, `.raf`, `.pef`, `.srw`, and `.x3f`. Tihulu decodes RAW files into 8-bit preview frames before grouping, stacking, or timelapse rendering.
+RAW support uses `rawpy` and covers common camera formats such as `.cr2`, `.cr3`, `.nef`, `.arw`, `.dng`, `.orf`, `.rw2`, `.raf`, `.pef`, `.srw`, and `.x3f`. The Debian/Pop!_OS desktop app, local browser UI, and CLI decode RAW files through the local Python engine. The GitHub Pages app runs fully in the browser, so it handles browser-readable formats and downloads PNG/WebM outputs.
+
+## GitHub Pages
+
+The static web app lives in `docs/` and is deployed by `.github/workflows/pages.yml` using GitHub Actions. The hosted app is configured for `https://tihulu.github.io/tihulu-star-trail/`.
 
 ## Development
 

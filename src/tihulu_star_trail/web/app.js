@@ -32,8 +32,7 @@ function setBusy(isBusy) {
 }
 
 function writeLog(lines) {
-  logOutput.textContent = lines.length ? lines.join("
-") : "Awaiting input.";
+  logOutput.textContent = lines.length ? lines.join("\n") : "Awaiting input.";
   logOutput.scrollTop = logOutput.scrollHeight;
 }
 

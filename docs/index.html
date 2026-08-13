@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Tihulu Star Trail Web</title>
+    <link rel="stylesheet" href="style.css">
+  </head>
+  <body>
+    <canvas id="starfield" aria-hidden="true"></canvas>
+    <main class="app-shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Tihulu Web</p>
+          <h1>Star Trail Forge</h1>
+        </div>
+        <div class="status-chip" id="statusChip">BROWSER</div>
+      </header>
+
+      <section class="workspace" aria-label="Tihulu web app">
+        <section class="control-panel">
+          <label class="drop-zone" id="dropZone">
+            <input id="fileInput" type="file" accept="image/*" multiple>
+            <span>Select Photos</span>
+          </label>
+
+          <div class="field-grid compact">
+            <label class="field">
+              <span>Group Threshold</span>
+              <input id="threshold" type="number" min="0" max="1" step="0.01" value="0.82">
+            </label>
+            <label class="field">
+              <span>Preview Side</span>
+              <input id="thumbSide" type="number" min="32" max="160" step="16" value="64">
+            </label>
+            <label class="field">
+              <span>Output Max Side</span>
+              <input id="maxSide" type="number" min="320" max="3840" step="160" value="1600">
+            </label>
+            <label class="field">
+              <span>FPS</span>
+              <input id="fps" type="number" min="1" max="60" step="1" value="24">
+            </label>
+          </div>
+
+          <div class="action-row">
+            <button class="ghost" id="analyzeButton" type="button">Analyze</button>
+            <button class="ghost" id="trailButton" type="button">Trail PNG</button>
+            <button class="primary" id="timelapseButton" type="button">Timelapse WebM</button>
+          </div>
+        </section>
+
+        <section class="monitor-panel" aria-label="Output preview">
+          <div class="meter-row">
+            <div>
+              <p class="eyebrow">Selected Group</p>
+              <h2 id="groupTitle">No Photos</h2>
+            </div>
+            <a class="download-link" id="downloadLink" hidden>Download</a>
+          </div>
+          <canvas id="previewCanvas" class="preview-canvas"></canvas>
+          <pre id="logOutput" class="log-output">Awaiting input.</pre>
+        </section>
+      </section>
+
+      <section class="groups-panel" id="groupsPanel" aria-label="Detected groups"></section>
+    </main>
+    <script src="app.js"></script>
+  </body>
+</html>

@@ -10,12 +10,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Install Debian image packages
         run: |
           sudo apt update
-          sudo apt install -y python3 python3-venv python3-pip python3-opencv python3-numpy python3-pillow python3-pytest
+          sudo apt install -y python3 python3-venv python3-pip python3-opencv python3-numpy python3-pillow python3-pytest python3-tk tk-dev xdg-utils
 
       - name: Install project
         run: |
@@ -23,6 +23,16 @@ jobs:
           . .venv/bin/activate
           python -m pip install rawpy
           python -m pip install -e . --no-deps
+
+      - name: Check browser JavaScript
+        run: |
+          node --check src/tihulu_star_trail/web/app.js
+          node --check docs/app.js
+
+      - name: Check desktop dependencies
+        run: |
+          . .venv/bin/activate
+          tihulu desktop --check
 
       - name: Run tests
         run: |

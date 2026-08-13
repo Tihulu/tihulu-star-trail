@@ -97,7 +97,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     ui = subcommands.add_parser(
         "ui",
-        help="launch the local cyberpunk dark web interface",
+        help="launch the local browser interface",
     )
     ui.add_argument("--host", default="127.0.0.1", help="host address to bind")
     ui.add_argument("--port", type=int, default=8765, help="port to bind")
@@ -107,6 +107,17 @@ def build_parser() -> argparse.ArgumentParser:
         help="open the interface in the default browser",
     )
     ui.set_defaults(func=ui_command)
+
+    desktop = subcommands.add_parser(
+        "desktop",
+        help="launch the native Debian/Pop!_OS desktop app",
+    )
+    desktop.add_argument(
+        "--check",
+        action="store_true",
+        help="verify native desktop dependencies without opening a window",
+    )
+    desktop.set_defaults(func=desktop_command)
 
     return parser
 
@@ -353,6 +364,17 @@ def ui_command(args: argparse.Namespace) -> int:
     return 0
 
 
+def desktop_command(args: argparse.Namespace) -> int:
+    from .desktop import check_desktop_dependencies, launch_desktop
+
+    if args.check:
+        check_desktop_dependencies()
+        print("Tihulu native desktop dependencies are available.")
+        return 0
+    launch_desktop()
+    return 0
+
+
 def _load_images(path: Path, recursive: bool) -> list[Path]:
     paths = list_images(path, recursive=recursive)
     if not paths:
@@ -375,6 +397,8 @@ def _dependency_error(error: ModuleNotFoundError) -> str:
         "numpy": "python3-numpy",
         "PIL": "python3-pillow",
         "rawpy": "rawpy is installed with pip; run: pip install rawpy",
+        "tkinter": "python3-tk tk-dev",
+        "_tkinter": "python3-tk tk-dev",
     }
     apt_name = apt_names.get(package)
     if apt_name and apt_name.startswith("python3-"):
