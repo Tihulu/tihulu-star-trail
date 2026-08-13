@@ -222,7 +222,7 @@ function updateVideoFormatSupport({announce = false} = {}) {
   const mp4Option = videoFormatSelect.querySelector('option[value="video/mp4"]');
   if (mp4Option) {
     mp4Option.disabled = !mp4Supported && !canConvertMp4;
-    mp4Option.textContent = mp4Supported ? "MP4" : canConvertMp4 ? "MP4 (convert)" : "MP4 (not supported here)";
+    mp4Option.textContent = mp4Supported ? "MP4 (native)" : canConvertMp4 ? "MP4 (convert)" : "MP4 (not supported here)";
   }
   if (videoFormatSelect.value === "video/mp4" && !mp4Supported && !canConvertMp4 && webmSupported) {
     videoFormatSelect.value = "video/webm";
@@ -234,7 +234,7 @@ function updateVideoFormatSupport({announce = false} = {}) {
     message = "Canvas video recording is not available in this browser.";
     warning = true;
   } else if (mp4Supported) {
-    message = "MP4 recording is available in this browser.";
+    message = "Native MP4 recording is available; no conversion will be used.";
   } else if (canConvertMp4) {
     message = videoFormatSelect.value === "video/mp4"
       ? "MP4 will record WebM first, then convert with FFmpeg WASM (~31 MB download)."
@@ -1659,8 +1659,13 @@ function supportedVideoMimeType(format) {
   if (!window.MediaRecorder || !MediaRecorder.isTypeSupported) return "";
   const candidates = format === "video/mp4"
     ? [
+        "video/mp4;codecs=avc3.42E01E",
+        "video/mp4;codecs=avc3",
         "video/mp4;codecs=avc1.42E01E",
+        "video/mp4;codecs=avc1",
         "video/mp4;codecs=h264",
+        "video/mp4;codecs=hvc1",
+        "video/mp4;codecs=hev1",
         "video/mp4"
       ]
     : [
