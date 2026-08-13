@@ -115,20 +115,19 @@ h2 {
 }
 
 .info-button {
-  width: 34px;
-  min-width: 34px;
+  min-width: 58px;
   min-height: 34px;
   position: absolute;
   top: 14px;
   right: 14px;
   z-index: 2;
   border-color: var(--line);
-  border-radius: 50%;
+  border-radius: 999px;
   background: rgba(2, 4, 10, 0.82);
   color: var(--cyan);
   font-size: 1rem;
   line-height: 1;
-  padding: 0;
+  padding: 0 12px;
   text-transform: none;
   box-shadow: 0 0 18px rgba(67, 247, 255, 0.14);
 }

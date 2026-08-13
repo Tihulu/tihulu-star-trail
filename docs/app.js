@@ -211,6 +211,7 @@ function setSettingsInfoOpen(open) {
   settingsInfoButton.classList.toggle("active", open);
   settingsInfoButton.setAttribute("aria-expanded", open ? "true" : "false");
   settingsInfoButton.setAttribute("aria-label", open ? "Hide parameter guide" : "Show parameter guide");
+  settingsInfoButton.textContent = open ? "Close Info" : "Info";
 }
 
 function updateVideoFormatSupport({announce = false} = {}) {
