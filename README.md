@@ -174,11 +174,11 @@ The default threshold is `0.32`. Most real night-sky sets will need a little tun
 
 ## RAW Files
 
-RAW support uses `rawpy` and covers common camera formats such as `.cr2`, `.cr3`, `.nef`, `.arw`, `.dng`, `.orf`, `.rw2`, `.raf`, `.pef`, `.srw`, and `.x3f`. The Debian/Pop!_OS desktop app, local browser UI, and CLI decode RAW files through the local Python engine. The GitHub Pages app runs fully in the browser, so it handles browser-readable formats and downloads PNG/WebM outputs.
+RAW support uses `rawpy` and covers common camera formats such as `.cr2`, `.cr3`, `.nef`, `.arw`, `.dng`, `.orf`, `.rw2`, `.raf`, `.pef`, `.srw`, and `.x3f`. The Debian/Pop!_OS desktop app, local browser UI, and CLI decode RAW files through the local Python engine. The GitHub Pages app runs fully in the browser, so it handles browser-readable formats and downloads PNG/JPEG images plus WebM/MP4 videos where the browser supports them.
 
 ## GitHub Pages
 
-The static web app lives in `docs/` and is deployed by `.github/workflows/pages.yml` using GitHub Actions. The hosted app is configured for `https://tihulu.github.io/tihulu-star-trail/`. Browser exports include PNG/JPEG image quality controls and a WebM video bitrate control.
+The static web app lives in `docs/` and is deployed by `.github/workflows/pages.yml` using GitHub Actions. The hosted app is configured for `https://tihulu.github.io/tihulu-star-trail/`. Browser exports include PNG/JPEG image quality controls plus WebM/MP4 video type and bitrate controls. MP4 export depends on browser MediaRecorder support; WebM is the safest browser fallback.
 
 ## Development
 

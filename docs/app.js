@@ -23,6 +23,7 @@ function log(lines) {
 function settings() {
   const imageFormat = document.querySelector("#imageFormat").value;
   const imageQuality = clamp(Number(document.querySelector("#imageQuality").value), 1, 100);
+  const videoFormat = document.querySelector("#videoFormat").value;
   const videoQualityMbps = clamp(Number(document.querySelector("#videoQuality").value), 0.5, 50);
   return {
     threshold: Number(document.querySelector("#threshold").value),
@@ -33,6 +34,9 @@ function settings() {
     imageQualityRatio: imageQuality / 100,
     imageExtension: imageFormat === "image/jpeg" ? "jpg" : "png",
     fps: Number(document.querySelector("#fps").value),
+    videoFormat,
+    videoExtension: videoFormat === "video/mp4" ? "mp4" : "webm",
+    videoLabel: videoFormat === "video/mp4" ? "MP4" : "WebM",
     videoQualityMbps,
     videoBitsPerSecond: Math.round(videoQualityMbps * 1000000)
   };
@@ -135,8 +139,8 @@ timelapseButton.addEventListener("click", async () => {
   try {
     const options = settings();
     const blob = await renderTimelapse(selected, options);
-    setDownload(URL.createObjectURL(blob), "tihulu-timelapse.webm");
-    log(`Timelapse ready from ${selected.length} frame(s) at ${options.videoQualityMbps} Mbps.`);
+    setDownload(URL.createObjectURL(blob), `tihulu-timelapse.${options.videoExtension}`);
+    log(`Timelapse ${options.videoLabel} ready from ${selected.length} frame(s) at ${options.videoQualityMbps} Mbps.`);
   } catch (error) {
     log(error.message || error);
   } finally {
@@ -295,7 +299,11 @@ async function renderTimelapse(selected, options) {
   first.close?.();
   const ctx = previewCanvas.getContext("2d");
   const stream = previewCanvas.captureStream(options.fps);
-  const mimeType = MediaRecorder.isTypeSupported("video/webm;codecs=vp9") ? "video/webm;codecs=vp9" : "video/webm";
+  const mimeType = supportedVideoMimeType(options.videoFormat);
+  if (!mimeType) {
+    stream.getTracks().forEach((track) => track.stop());
+    throw new Error(`${options.videoLabel} recording is not supported by this browser. Choose WebM or use the Linux desktop app for MP4 output.`);
+  }
   const recorder = new MediaRecorder(stream, {
     mimeType,
     videoBitsPerSecond: options.videoBitsPerSecond
@@ -354,6 +362,21 @@ function contain(width, height, side) {
     width: targetWidth,
     height: targetHeight
   };
+}
+
+function supportedVideoMimeType(format) {
+  const candidates = format === "video/mp4"
+    ? [
+        "video/mp4;codecs=avc1.42E01E",
+        "video/mp4;codecs=h264",
+        "video/mp4"
+      ]
+    : [
+        "video/webm;codecs=vp9",
+        "video/webm;codecs=vp8",
+        "video/webm"
+      ];
+  return candidates.find((candidate) => MediaRecorder.isTypeSupported(candidate)) || "";
 }
 
 function clamp(value, min, max) {
