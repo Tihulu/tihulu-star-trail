@@ -73,6 +73,14 @@ const RAW_EXTENSIONS = new Set([
   ".raw", ".rwl", ".rw2", ".srw", ".x3f"
 ]);
 
+const FFMPEG_MODULE_URL = "https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.15/dist/esm/index.js";
+const FFMPEG_UTIL_URL = "https://cdn.jsdelivr.net/npm/@ffmpeg/util@0.12.2/dist/esm/index.js";
+const FFMPEG_CORE_BASE_URL = "https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.10/dist/esm";
+let ffmpegToolsPromise = null;
+let ffmpegLoadPromise = null;
+let ffmpegInstance = null;
+let ffmpegLastProgress = -1;
+
 function log(lines) {
   logOutput.textContent = Array.isArray(lines) ? lines.join("\n") : String(lines);
   logOutput.scrollTop = logOutput.scrollHeight;
@@ -201,12 +209,13 @@ function updateVideoFormatSupport({announce = false} = {}) {
   const canRecordCanvas = Boolean(previewCanvas.captureStream && window.MediaRecorder && MediaRecorder.isTypeSupported);
   const webmSupported = Boolean(supportedVideoMimeType("video/webm"));
   const mp4Supported = Boolean(supportedVideoMimeType("video/mp4"));
+  const canConvertMp4 = !mp4Supported && webmSupported && Boolean(window.WebAssembly);
   const mp4Option = videoFormatSelect.querySelector('option[value="video/mp4"]');
   if (mp4Option) {
-    mp4Option.disabled = !mp4Supported;
-    mp4Option.textContent = mp4Supported ? "MP4" : "MP4 (not supported here)";
+    mp4Option.disabled = !mp4Supported && !canConvertMp4;
+    mp4Option.textContent = mp4Supported ? "MP4" : canConvertMp4 ? "MP4 (convert)" : "MP4 (not supported here)";
   }
-  if (videoFormatSelect.value === "video/mp4" && !mp4Supported && webmSupported) {
+  if (videoFormatSelect.value === "video/mp4" && !mp4Supported && !canConvertMp4 && webmSupported) {
     videoFormatSelect.value = "video/webm";
   }
 
@@ -215,32 +224,36 @@ function updateVideoFormatSupport({announce = false} = {}) {
   if (!canRecordCanvas) {
     message = "Canvas video recording is not available in this browser.";
     warning = true;
-  } else if (!mp4Supported && webmSupported) {
-    message = "MP4 recording is not available here; WebM is selected. Use the Linux desktop app for MP4.";
-    warning = true;
   } else if (mp4Supported) {
     message = "MP4 recording is available in this browser.";
+  } else if (canConvertMp4) {
+    message = videoFormatSelect.value === "video/mp4"
+      ? "MP4 will record WebM first, then convert with FFmpeg WASM (~31 MB download)."
+      : "WebM is selected. MP4 conversion is available, but slower, through FFmpeg WASM.";
   } else if (webmSupported) {
     message = "WebM recording is available in this browser.";
   }
 
   if (videoSupportNote) {
     videoSupportNote.textContent = message;
-    videoSupportNote.classList.toggle("warn", warning);
+    videoSupportNote.classList.toggle("warn", warning || canConvertMp4 && videoFormatSelect.value === "video/mp4");
     videoSupportNote.hidden = !message;
   }
-  if (announce && warning) log(message);
+  if (announce && (warning || canConvertMp4 && videoFormatSelect.value === "video/mp4")) log(message);
 }
 
-function supportedVideoOptions(options, {announce = false} = {}) {
-  if (supportedVideoMimeType(options.videoFormat)) return options;
-  const fallbackMimeType = supportedVideoMimeType("video/webm");
-  if (options.videoFormat === "video/mp4" && fallbackMimeType && videoFormatSelect) {
-    videoFormatSelect.value = "video/webm";
-    updateVideoFormatSupport({announce});
-    return settings();
+function videoExportPlan(options) {
+  if (supportedVideoMimeType(options.videoFormat)) {
+    return {recordOptions: options, outputOptions: options, convertToMp4: false};
   }
-  throw new Error(`${options.videoLabel} recording is not supported by this browser. Choose WebM or use the Linux desktop app for MP4 output.`);
+  if (options.videoFormat === "video/mp4" && supportedVideoMimeType("video/webm") && window.WebAssembly) {
+    return {
+      recordOptions: {...options, videoFormat: "video/webm", videoExtension: "webm", videoLabel: "WebM"},
+      outputOptions: options,
+      convertToMp4: true
+    };
+  }
+  throw new Error(`${options.videoLabel} export is not supported by this browser. Choose WebM or use the Linux desktop app for MP4 output.`);
 }
 
 function activeFiles() {
@@ -384,15 +397,24 @@ timelapseButton.addEventListener("click", async () => {
   clearDownload();
   try {
     const requestedOptions = settings();
-    const options = supportedVideoOptions(requestedOptions, {announce: true});
-    const result = await renderTimelapse(selected, options);
-    const outputUrl = URL.createObjectURL(result.blob);
-    setDownload(outputUrl, `tihulu-timelapse.${options.videoExtension}`);
-    setVideoPreview(outputUrl, options, result.frameCount);
-    const fallbackNote = requestedOptions.videoLabel === options.videoLabel
-      ? ""
-      : ` Requested ${requestedOptions.videoLabel}; used ${options.videoLabel} because this browser cannot record MP4.`;
-    log(`Timelapse ${options.videoLabel} ready from ${result.frameCount} decoded frame(s) at ${options.videoQualityMbps} Mbps. Use the player to seek, restart, or replay.${fallbackNote}`);
+    const plan = videoExportPlan(requestedOptions);
+    const result = await renderTimelapse(selected, plan.recordOptions);
+    let outputBlob = result.blob;
+    let outputOptions = plan.outputOptions;
+    let conversionNote = "";
+    if (plan.convertToMp4) {
+      try {
+        outputBlob = await convertWebMToMp4(result.blob, requestedOptions);
+        conversionNote = " Converted to MP4 with FFmpeg WASM.";
+      } catch (conversionError) {
+        outputOptions = plan.recordOptions;
+        conversionNote = ` MP4 conversion failed: ${conversionError.message || conversionError}. Keeping WebM output.`;
+      }
+    }
+    const outputUrl = URL.createObjectURL(outputBlob);
+    setDownload(outputUrl, `tihulu-timelapse.${outputOptions.videoExtension}`);
+    setVideoPreview(outputUrl, outputOptions, result.frameCount);
+    log(`Timelapse ${outputOptions.videoLabel} ready from ${result.frameCount} decoded frame(s) at ${requestedOptions.videoQualityMbps} Mbps. Use the player to seek, restart, or replay.${conversionNote}`);
   } catch (error) {
     log(error.message || error);
   } finally {
@@ -1460,6 +1482,60 @@ async function renderTrail(selected, options) {
     else reject(new Error("Could not create image output."));
   }, options.imageFormat, options.imageQualityRatio));
   return {blob, frameCount};
+}
+
+async function convertWebMToMp4(webmBlob, options) {
+  log("Loading FFmpeg WASM core for MP4 conversion (~31 MB). This can take a bit the first time.");
+  const ffmpeg = await loadFFmpeg();
+  const {fetchFile} = await loadFFmpegTools();
+  ffmpegLastProgress = -1;
+  log("Converting WebM to MP4 with FFmpeg WASM...");
+  await ffmpeg.writeFile("input.webm", await fetchFile(webmBlob));
+  await ffmpeg.exec(["-y", "-i", "input.webm", "-movflags", "faststart", "output.mp4"]);
+  const data = await ffmpeg.readFile("output.mp4");
+  try {
+    await ffmpeg.deleteFile("input.webm");
+    await ffmpeg.deleteFile("output.mp4");
+  } catch (error) {
+    // Older ffmpeg.wasm builds may not expose deleteFile; overwriting is fine.
+  }
+  return new Blob([data.buffer], {type: "video/mp4"});
+}
+
+async function loadFFmpegTools() {
+  if (!ffmpegToolsPromise) {
+    ffmpegToolsPromise = Promise.all([
+      import(FFMPEG_MODULE_URL),
+      import(FFMPEG_UTIL_URL)
+    ]).then(([ffmpegModule, utilModule]) => ({
+      FFmpeg: ffmpegModule.FFmpeg,
+      fetchFile: utilModule.fetchFile,
+      toBlobURL: utilModule.toBlobURL
+    }));
+  }
+  return ffmpegToolsPromise;
+}
+
+async function loadFFmpeg() {
+  const {FFmpeg, toBlobURL} = await loadFFmpegTools();
+  if (!ffmpegInstance) {
+    ffmpegInstance = new FFmpeg();
+    ffmpegInstance.on("progress", ({progress}) => {
+      const percent = Math.round(clamp(progress, 0, 1) * 100);
+      if (percent >= ffmpegLastProgress + 10 || percent === 100) {
+        ffmpegLastProgress = percent;
+        log(`Converting to MP4: ${percent}%`);
+      }
+    });
+  }
+  if (!ffmpegLoadPromise) {
+    ffmpegLoadPromise = ffmpegInstance.load({
+      coreURL: await toBlobURL(`${FFMPEG_CORE_BASE_URL}/ffmpeg-core.js`, "text/javascript"),
+      wasmURL: await toBlobURL(`${FFMPEG_CORE_BASE_URL}/ffmpeg-core.wasm`, "application/wasm")
+    });
+  }
+  await ffmpegLoadPromise;
+  return ffmpegInstance;
 }
 
 async function renderTimelapse(selected, options) {

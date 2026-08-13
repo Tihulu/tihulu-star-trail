@@ -19,6 +19,7 @@ The grouping step uses OpenCV feature matching and a RANSAC homography check. In
 - Provides a built-in parameter guide for threshold, preview size, export size, image/video formats and quality, FPS, and time metadata windows.
 - Opens completed hosted-web timelapse exports in an in-page video player with native replay and seek controls.
 - Lets hosted-web users type a custom download filename before saving trail images or timelapse videos.
+- Converts Firefox-hosted WebM timelapse recordings to MP4 through FFmpeg WASM when MP4 is selected.
 - Writes a JSON manifest with group scores and source paths.
 - Creates star trails with a lighten blend, which is the classic pixel-wise maximum stack.
 - Renders MP4 timelapse videos from full folders or detected groups.
@@ -190,7 +191,7 @@ RAW support uses `rawpy` and covers common camera formats such as `.cr2`, `.cr3`
 
 ## GitHub Pages
 
-The static web app lives in `docs/` and is deployed by `.github/workflows/pages.yml` using GitHub Actions. The hosted app is configured for `https://tihulu.github.io/tihulu-star-trail/`. Browser exports include PNG/JPEG image quality controls, custom download names, WebM/MP4 video type, bitrate controls, and an in-page player for completed timelapse videos. The web app also includes stricter browser-side grouping, optional file-time metadata grouping, a right-corner parameter guide, and a manual group editor with a scrollable thumbnail browser, arrow-key photo navigation, undo, group renaming, manual group creation, drag-to-reorder group cards, moving photos between detected groups, and removing photos from the current working set. MP4 export depends on browser MediaRecorder support; Firefox commonly disables MP4 recording, so the hosted app falls back to WebM and the Linux desktop app remains the reliable MP4 path.
+The static web app lives in `docs/` and is deployed by `.github/workflows/pages.yml` using GitHub Actions. The hosted app is configured for `https://tihulu.github.io/tihulu-star-trail/`. Browser exports include PNG/JPEG image quality controls, custom download names, WebM/MP4 video type, bitrate controls, and an in-page player for completed timelapse videos. The web app also includes stricter browser-side grouping, optional file-time metadata grouping, a right-corner parameter guide, and a manual group editor with a scrollable thumbnail browser, arrow-key photo navigation, undo, group renaming, manual group creation, drag-to-reorder group cards, moving photos between detected groups, and removing photos from the current working set. MP4 export uses native browser MediaRecorder support when available. Firefox commonly disables MP4 recording, so the hosted app records WebM first and can transcode it to MP4 with FFmpeg WASM; this downloads the FFmpeg core at conversion time and can be slow for large exports. The Linux desktop app remains the fastest reliable MP4 path.
 
 ## Development
 
