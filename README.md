@@ -188,7 +188,7 @@ RAW support uses `rawpy` and covers common camera formats such as `.cr2`, `.cr3`
 
 ## GitHub Pages
 
-The static web app lives in `docs/` and is deployed by `.github/workflows/pages.yml` using GitHub Actions. The hosted app is configured for `https://tihulu.github.io/tihulu-star-trail/`. Browser exports include PNG/JPEG image quality controls plus WebM/MP4 video type and bitrate controls. The web app also includes stricter browser-side grouping, optional file-time metadata grouping, a right-corner parameter guide, and a manual group editor with a scrollable thumbnail browser, arrow-key photo navigation, undo, group renaming, manual group creation, drag-to-reorder group cards, moving photos between detected groups, and removing photos from the current working set. MP4 export depends on browser MediaRecorder support; WebM is the safest browser fallback.
+The static web app lives in `docs/` and is deployed by `.github/workflows/pages.yml` using GitHub Actions. The hosted app is configured for `https://tihulu.github.io/tihulu-star-trail/`. Browser exports include PNG/JPEG image quality controls plus WebM/MP4 video type and bitrate controls. The web app also includes stricter browser-side grouping, optional file-time metadata grouping, a right-corner parameter guide, and a manual group editor with a scrollable thumbnail browser, arrow-key photo navigation, undo, group renaming, manual group creation, drag-to-reorder group cards, moving photos between detected groups, and removing photos from the current working set. MP4 export depends on browser MediaRecorder support; Firefox commonly disables MP4 recording, so the hosted app falls back to WebM and the Linux desktop app remains the reliable MP4 path.
 
 ## Development
 

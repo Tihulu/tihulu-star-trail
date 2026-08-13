@@ -3,6 +3,8 @@ const dropZone = document.querySelector("#dropZone");
 const analyzeButton = document.querySelector("#analyzeButton");
 const trailButton = document.querySelector("#trailButton");
 const timelapseButton = document.querySelector("#timelapseButton");
+const videoFormatSelect = document.querySelector("#videoFormat");
+const videoSupportNote = document.querySelector("#videoSupportNote");
 const settingsInfoButton = document.querySelector("#settingsInfoButton");
 const settingsInfo = document.querySelector("#settingsInfo");
 const timeMetadataToggle = document.querySelector("#timeMetadata");
@@ -71,7 +73,7 @@ function log(lines) {
 function settings() {
   const imageFormat = document.querySelector("#imageFormat").value;
   const imageQuality = clamp(Number(document.querySelector("#imageQuality").value), 1, 100);
-  const videoFormat = document.querySelector("#videoFormat").value;
+  const videoFormat = videoFormatSelect?.value ?? "video/webm";
   const videoQualityMbps = clamp(Number(document.querySelector("#videoQuality").value), 0.5, 50);
   const timeWindowHours = clamp(Number(timeWindowInput?.value ?? DEFAULT_TIME_WINDOW_HOURS), 0.1, 720);
   return {
@@ -122,6 +124,53 @@ function setSettingsInfoOpen(open) {
   settingsInfoButton.classList.toggle("active", open);
   settingsInfoButton.setAttribute("aria-expanded", open ? "true" : "false");
   settingsInfoButton.setAttribute("aria-label", open ? "Hide parameter guide" : "Show parameter guide");
+}
+
+function updateVideoFormatSupport({announce = false} = {}) {
+  if (!videoFormatSelect) return;
+  const canRecordCanvas = Boolean(previewCanvas.captureStream && window.MediaRecorder && MediaRecorder.isTypeSupported);
+  const webmSupported = Boolean(supportedVideoMimeType("video/webm"));
+  const mp4Supported = Boolean(supportedVideoMimeType("video/mp4"));
+  const mp4Option = videoFormatSelect.querySelector('option[value="video/mp4"]');
+  if (mp4Option) {
+    mp4Option.disabled = !mp4Supported;
+    mp4Option.textContent = mp4Supported ? "MP4" : "MP4 (not supported here)";
+  }
+  if (videoFormatSelect.value === "video/mp4" && !mp4Supported && webmSupported) {
+    videoFormatSelect.value = "video/webm";
+  }
+
+  let message = "";
+  let warning = false;
+  if (!canRecordCanvas) {
+    message = "Canvas video recording is not available in this browser.";
+    warning = true;
+  } else if (!mp4Supported && webmSupported) {
+    message = "MP4 recording is not available here; WebM is selected. Use the Linux desktop app for MP4.";
+    warning = true;
+  } else if (mp4Supported) {
+    message = "MP4 recording is available in this browser.";
+  } else if (webmSupported) {
+    message = "WebM recording is available in this browser.";
+  }
+
+  if (videoSupportNote) {
+    videoSupportNote.textContent = message;
+    videoSupportNote.classList.toggle("warn", warning);
+    videoSupportNote.hidden = !message;
+  }
+  if (announce && warning) log(message);
+}
+
+function supportedVideoOptions(options, {announce = false} = {}) {
+  if (supportedVideoMimeType(options.videoFormat)) return options;
+  const fallbackMimeType = supportedVideoMimeType("video/webm");
+  if (options.videoFormat === "video/mp4" && fallbackMimeType && videoFormatSelect) {
+    videoFormatSelect.value = "video/webm";
+    updateVideoFormatSupport({announce});
+    return settings();
+  }
+  throw new Error(`${options.videoLabel} recording is not supported by this browser. Choose WebM or use the Linux desktop app for MP4 output.`);
 }
 
 function activeFiles() {
@@ -264,15 +313,23 @@ timelapseButton.addEventListener("click", async () => {
   setBusy(true);
   clearDownload();
   try {
-    const options = settings();
+    const requestedOptions = settings();
+    const options = supportedVideoOptions(requestedOptions, {announce: true});
     const result = await renderTimelapse(selected, options);
     setDownload(URL.createObjectURL(result.blob), `tihulu-timelapse.${options.videoExtension}`);
-    log(`Timelapse ${options.videoLabel} ready from ${result.frameCount} decoded frame(s) at ${options.videoQualityMbps} Mbps.`);
+    const fallbackNote = requestedOptions.videoLabel === options.videoLabel
+      ? ""
+      : ` Requested ${requestedOptions.videoLabel}; used ${options.videoLabel} because this browser cannot record MP4.`;
+    log(`Timelapse ${options.videoLabel} ready from ${result.frameCount} decoded frame(s) at ${options.videoQualityMbps} Mbps.${fallbackNote}`);
   } catch (error) {
     log(error.message || error);
   } finally {
     setBusy(false);
   }
+});
+
+videoFormatSelect?.addEventListener("change", () => {
+  updateVideoFormatSupport({announce: true});
 });
 
 settingsInfoButton?.addEventListener("click", () => {
@@ -1432,6 +1489,7 @@ function contain(width, height, side) {
 }
 
 function supportedVideoMimeType(format) {
+  if (!window.MediaRecorder || !MediaRecorder.isTypeSupported) return "";
   const candidates = format === "video/mp4"
     ? [
         "video/mp4;codecs=avc1.42E01E",
@@ -1516,4 +1574,5 @@ function startStarfield() {
 const CYAN = "#43f7ff";
 const PINK = "#ff2bd6";
 startStarfield();
+updateVideoFormatSupport();
 renderEditor();
