@@ -96,6 +96,7 @@ h2 {
 .control-panel,
 .monitor-panel,
 .groups-panel,
+.editor-panel,
 .group-card {
   border: 1px solid var(--line);
   background: var(--panel);
@@ -104,7 +105,8 @@ h2 {
 }
 
 .control-panel,
-.monitor-panel {
+.monitor-panel,
+.editor-panel {
   padding: 18px;
 }
 
@@ -205,6 +207,11 @@ button.ghost {
   color: var(--cyan);
 }
 
+button.danger {
+  border-color: rgba(255, 91, 126, 0.58);
+  color: var(--danger);
+}
+
 button:disabled {
   cursor: not-allowed;
   opacity: 0.55;
@@ -213,6 +220,10 @@ button:disabled {
 .action-row {
   margin-top: 18px;
   flex-wrap: wrap;
+}
+
+.action-row.tight {
+  margin-top: 0;
 }
 
 .status-chip {
@@ -255,6 +266,82 @@ button:disabled {
   margin: 16px 0 0;
   padding: 14px;
   white-space: pre-wrap;
+}
+
+.editor-panel {
+  margin-top: 20px;
+}
+
+.editor-head,
+.editor-body,
+.nav-row {
+  display: flex;
+  gap: 14px;
+}
+
+.editor-head {
+  align-items: center;
+  justify-content: space-between;
+}
+
+.photo-counter {
+  min-width: 86px;
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(67, 247, 255, 0.35);
+  border-radius: 999px;
+  color: var(--green);
+  font-weight: 900;
+}
+
+.editor-body {
+  align-items: stretch;
+  margin-top: 14px;
+}
+
+.photo-stage {
+  min-width: 0;
+  flex: 1 1 auto;
+  margin: 0;
+}
+
+.photo-stage img {
+  width: 100%;
+  height: clamp(240px, 34vw, 460px);
+  display: block;
+  object-fit: contain;
+  border: 1px solid rgba(67, 247, 255, 0.24);
+  border-radius: 8px;
+  background: #02040a;
+}
+
+.photo-stage img:not([src]) {
+  background:
+    linear-gradient(135deg, rgba(67, 247, 255, 0.08), rgba(255, 43, 214, 0.08)),
+    #02040a;
+}
+
+.photo-stage figcaption {
+  min-height: 32px;
+  color: var(--muted);
+  font-size: 0.88rem;
+  font-weight: 800;
+  margin-top: 8px;
+  overflow-wrap: anywhere;
+}
+
+.editor-controls {
+  width: min(320px, 34%);
+  display: grid;
+  align-content: start;
+  gap: 12px;
+}
+
+.nav-row button,
+.editor-controls .action-row button {
+  flex: 1 1 0;
 }
 
 .groups-panel {
@@ -320,12 +407,22 @@ button:disabled {
   .groups-panel {
     grid-template-columns: 1fr;
   }
+
+  .editor-body {
+    flex-direction: column;
+  }
+
+  .editor-controls {
+    width: 100%;
+  }
 }
 
 @media (max-width: 620px) {
   .topbar,
   .meter-row,
-  .action-row {
+  .action-row,
+  .editor-head,
+  .nav-row {
     align-items: stretch;
     flex-direction: column;
   }
@@ -336,7 +433,8 @@ button:disabled {
 
   button,
   .status-chip,
-  .download-link {
+  .download-link,
+  .photo-counter {
     width: 100%;
   }
 }

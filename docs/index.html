@@ -85,6 +85,36 @@
         </section>
       </section>
 
+      <section class="editor-panel" aria-label="Manual group editor">
+        <div class="editor-head">
+          <div>
+            <p class="eyebrow">Manual Review</p>
+            <h2 id="editorTitle">Photo Editor</h2>
+          </div>
+          <div class="photo-counter" id="photoCounter">0 / 0</div>
+        </div>
+        <div class="editor-body">
+          <figure class="photo-stage">
+            <img id="photoPreview" alt="">
+            <figcaption id="photoName">Select photos.</figcaption>
+          </figure>
+          <div class="editor-controls">
+            <div class="nav-row">
+              <button class="ghost" id="previousPhotoButton" type="button">Prev</button>
+              <button class="ghost" id="nextPhotoButton" type="button">Next</button>
+            </div>
+            <label class="field">
+              <span>Move To</span>
+              <select id="targetGroup"></select>
+            </label>
+            <div class="action-row tight">
+              <button class="ghost" id="movePhotoButton" type="button">Move Photo</button>
+              <button class="ghost danger" id="removePhotoButton" type="button">Remove</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <section class="groups-panel" id="groupsPanel" aria-label="Detected groups"></section>
     </main>
     <script src="app.js"></script>

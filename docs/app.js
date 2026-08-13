@@ -10,10 +10,24 @@ const statusChip = document.querySelector("#statusChip");
 const previewCanvas = document.querySelector("#previewCanvas");
 const downloadLink = document.querySelector("#downloadLink");
 const starfield = document.querySelector("#starfield");
+const editorTitle = document.querySelector("#editorTitle");
+const photoCounter = document.querySelector("#photoCounter");
+const photoPreview = document.querySelector("#photoPreview");
+const photoName = document.querySelector("#photoName");
+const previousPhotoButton = document.querySelector("#previousPhotoButton");
+const nextPhotoButton = document.querySelector("#nextPhotoButton");
+const targetGroup = document.querySelector("#targetGroup");
+const movePhotoButton = document.querySelector("#movePhotoButton");
+const removePhotoButton = document.querySelector("#removePhotoButton");
 
 let files = [];
 let groups = [];
 let selectedGroup = 0;
+let selectedPhotoIndex = 0;
+let isBusy = false;
+let photoPreviewUrl = "";
+let photoPreviewFile = null;
+let canvasPreviewToken = 0;
 
 function log(lines) {
   logOutput.textContent = Array.isArray(lines) ? lines.join("\n") : String(lines);
@@ -43,10 +57,12 @@ function settings() {
 }
 
 function setBusy(busy) {
+  isBusy = busy;
   [fileInput, analyzeButton, trailButton, timelapseButton].forEach((node) => {
     node.disabled = busy;
   });
   statusChip.textContent = busy ? "WORKING" : "BROWSER";
+  renderEditor();
 }
 
 function setDownload(url, filename) {
@@ -63,18 +79,27 @@ function clearDownload() {
 }
 
 function activeFiles() {
-  if (!groups.length) return files;
-  return groups[Math.min(selectedGroup, groups.length - 1)].files;
+  const group = activeGroup();
+  return group ? group.files : files;
+}
+
+function activeGroup() {
+  if (!groups.length) return null;
+  selectedGroup = Math.min(selectedGroup, groups.length - 1);
+  return groups[selectedGroup];
 }
 
 function chooseFiles(nextFiles) {
   files = Array.from(nextFiles).filter((file) => file.type.startsWith("image/"));
   groups = [];
   selectedGroup = 0;
+  selectedPhotoIndex = 0;
   clearDownload();
   groupsPanel.innerHTML = "";
   groupTitle.textContent = files.length ? `${files.length} photo(s)` : "No Photos";
   log(files.length ? `Loaded ${files.length} browser-readable photo(s).` : "Awaiting input.");
+  renderEditor();
+  void previewCurrentPhoto();
 }
 
 fileInput.addEventListener("change", () => chooseFiles(fileInput.files));
@@ -104,9 +129,11 @@ analyzeButton.addEventListener("click", async () => {
   try {
     groups = await groupPhotos(files, settings());
     selectedGroup = 0;
+    selectedPhotoIndex = 0;
     renderGroups();
-    await previewGroup();
-    log([`Groups: ${groups.length}`, ...groups.map((group, index) => `group_${String(index + 1).padStart(3, "0")}: ${group.files.length}`)]);
+    renderEditor();
+    await previewCurrentPhoto();
+    log([`Groups: ${groups.length}`, ...groups.map((group, index) => `${groupLabel(index)}: ${group.files.length}`)]);
   } catch (error) {
     log(error.message || error);
   } finally {
@@ -146,6 +173,22 @@ timelapseButton.addEventListener("click", async () => {
   } finally {
     setBusy(false);
   }
+});
+
+previousPhotoButton.addEventListener("click", async () => {
+  await selectPhoto(selectedPhotoIndex - 1);
+});
+
+nextPhotoButton.addEventListener("click", async () => {
+  await selectPhoto(selectedPhotoIndex + 1);
+});
+
+movePhotoButton.addEventListener("click", async () => {
+  await moveSelectedPhoto();
+});
+
+removePhotoButton.addEventListener("click", async () => {
+  await removeSelectedPhoto();
 });
 
 async function groupPhotos(inputFiles, options) {
@@ -225,8 +268,8 @@ async function renderGroups() {
     const card = document.createElement("button");
     card.type = "button";
     card.className = `group-card${index === selectedGroup ? " active" : ""}`;
-    const score = group.scores.length ? group.scores.reduce((sum, value) => sum + value, 0) / group.scores.length : 1;
-    card.innerHTML = `<strong>group_${String(index + 1).padStart(3, "0")}</strong><span>${group.files.length} frame(s) / ${score.toFixed(2)}</span><div class="thumb-strip"></div>`;
+    const score = groupScore(group);
+    card.innerHTML = `<strong>${groupLabel(index)}</strong><span>${group.files.length} frame(s) / ${score.toFixed(2)}</span><div class="thumb-strip"></div>`;
     const strip = card.querySelector(".thumb-strip");
     for (const file of group.files.slice(0, 4)) {
       const image = document.createElement("img");
@@ -237,22 +280,166 @@ async function renderGroups() {
     }
     card.addEventListener("click", async () => {
       selectedGroup = index;
+      selectedPhotoIndex = 0;
       renderGroups();
-      await previewGroup();
+      renderEditor();
+      await previewCurrentPhoto();
     });
     groupsPanel.appendChild(card);
   }
 }
 
-async function previewGroup() {
+function renderEditor() {
   const selected = activeFiles();
-  groupTitle.textContent = groups.length ? `group_${String(selectedGroup + 1).padStart(3, "0")}` : `${selected.length} photo(s)`;
-  if (!selected.length) return;
-  const bitmap = await decode(selected[0]);
+  const group = activeGroup();
+  const hasPhoto = selected.length > 0;
+  if (selectedPhotoIndex >= selected.length) selectedPhotoIndex = Math.max(0, selected.length - 1);
+
+  editorTitle.textContent = group ? groupLabel(selectedGroup) : files.length ? "All Photos" : "Photo Editor";
+  photoCounter.textContent = hasPhoto ? `${selectedPhotoIndex + 1} / ${selected.length}` : "0 / 0";
+  photoName.textContent = hasPhoto ? selected[selectedPhotoIndex].name : "Select photos.";
+  setPhotoPreview(hasPhoto ? selected[selectedPhotoIndex] : null);
+
+  previousPhotoButton.disabled = isBusy || selected.length < 2;
+  nextPhotoButton.disabled = isBusy || selected.length < 2;
+  removePhotoButton.disabled = isBusy || !hasPhoto;
+
+  targetGroup.innerHTML = "";
+  if (groups.length) {
+    for (const [index] of groups.entries()) {
+      if (index === selectedGroup) continue;
+      const option = document.createElement("option");
+      option.value = String(index);
+      option.textContent = groupLabel(index);
+      targetGroup.appendChild(option);
+    }
+    const option = document.createElement("option");
+    option.value = "new";
+    option.textContent = "New Group";
+    targetGroup.appendChild(option);
+  } else {
+    const option = document.createElement("option");
+    option.value = "";
+    option.textContent = "Analyze First";
+    targetGroup.appendChild(option);
+  }
+  movePhotoButton.disabled = isBusy || !hasPhoto || !groups.length || !targetGroup.value;
+  targetGroup.disabled = isBusy || !hasPhoto || !groups.length;
+}
+
+function setPhotoPreview(file) {
+  if (file === photoPreviewFile) return;
+  if (photoPreviewUrl) URL.revokeObjectURL(photoPreviewUrl);
+  photoPreviewUrl = "";
+  photoPreviewFile = file;
+  if (!file) {
+    photoPreview.removeAttribute("src");
+    photoPreview.alt = "";
+    return;
+  }
+  photoPreviewUrl = URL.createObjectURL(file);
+  photoPreview.src = photoPreviewUrl;
+  photoPreview.alt = file.name;
+}
+
+async function selectPhoto(nextIndex) {
+  const selected = activeFiles();
+  if (!selected.length) {
+    renderEditor();
+    return;
+  }
+  selectedPhotoIndex = (nextIndex + selected.length) % selected.length;
+  renderEditor();
+  await previewCurrentPhoto();
+}
+
+async function moveSelectedPhoto() {
+  const sourceGroup = activeGroup();
+  const selected = activeFiles();
+  const file = selected[selectedPhotoIndex];
+  if (!sourceGroup || !file || !targetGroup.value) return;
+
+  const targetValue = targetGroup.value;
+  const targetIndexBeforeMove = targetValue === "new" ? groups.length : Number(targetValue);
+  if (targetValue !== "new" && (!groups[targetIndexBeforeMove] || targetIndexBeforeMove === selectedGroup)) return;
+
+  const sourceIndex = selectedPhotoIndex;
+  const [movedFile] = sourceGroup.files.splice(sourceIndex, 1);
+  const [movedScore] = sourceGroup.scores.splice(sourceIndex, 1);
+
+  let targetIndex = targetIndexBeforeMove;
+  if (targetValue === "new") {
+    groups.push({representative: null, files: [movedFile], scores: [movedScore ?? 1], manual: true});
+  } else {
+    groups[targetIndex].files.push(movedFile);
+    groups[targetIndex].scores.push(movedScore ?? 1);
+  }
+
+  if (!sourceGroup.files.length) {
+    const removedIndex = selectedGroup;
+    groups.splice(removedIndex, 1);
+    if (targetIndex > removedIndex) targetIndex -= 1;
+  }
+
+  selectedGroup = Math.min(Math.max(targetIndex, 0), Math.max(groups.length - 1, 0));
+  selectedPhotoIndex = Math.max(activeFiles().length - 1, 0);
+  refreshGroupsAfterEdit(`Moved ${movedFile.name} to ${groups.length ? groupLabel(selectedGroup) : "a group"}.`);
+  await previewCurrentPhoto();
+}
+
+async function removeSelectedPhoto() {
+  const selected = activeFiles();
+  const file = selected[selectedPhotoIndex];
+  if (!file) return;
+
+  files = files.filter((item) => item !== file);
+  if (groups.length) {
+    const group = activeGroup();
+    group.files.splice(selectedPhotoIndex, 1);
+    group.scores.splice(selectedPhotoIndex, 1);
+    groups = groups.filter((item) => item.files.length);
+  }
+
+  selectedGroup = Math.min(selectedGroup, Math.max(groups.length - 1, 0));
+  selectedPhotoIndex = Math.min(selectedPhotoIndex, Math.max(activeFiles().length - 1, 0));
+  refreshGroupsAfterEdit(`Removed ${file.name} from the working set.`);
+  await previewCurrentPhoto();
+}
+
+function refreshGroupsAfterEdit(message) {
+  renderGroups();
+  renderEditor();
+  log(message);
+}
+
+async function previewCurrentPhoto() {
+  const selected = activeFiles();
+  const current = selected[selectedPhotoIndex];
+  groupTitle.textContent = groups.length ? `${groupLabel(selectedGroup)} (${selected.length} frame(s))` : `${selected.length} photo(s)`;
+  if (!current) {
+    canvasPreviewToken += 1;
+    const ctx = previewCanvas.getContext("2d");
+    ctx?.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
+    return;
+  }
+  const token = (canvasPreviewToken += 1);
+  const bitmap = await decode(current);
+  if (token !== canvasPreviewToken) {
+    bitmap.close?.();
+    return;
+  }
   fitCanvas(previewCanvas, bitmap.width, bitmap.height, 900);
   const ctx = previewCanvas.getContext("2d");
   ctx.drawImage(bitmap, 0, 0, previewCanvas.width, previewCanvas.height);
   bitmap.close?.();
+}
+
+function groupLabel(index) {
+  return `group_${String(index + 1).padStart(3, "0")}`;
+}
+
+function groupScore(group) {
+  return group.scores.length ? group.scores.reduce((sum, value) => sum + value, 0) / group.scores.length : 1;
 }
 
 async function renderTrail(selected, options) {
@@ -449,3 +636,4 @@ function startStarfield() {
 const CYAN = "#43f7ff";
 const PINK = "#ff2bd6";
 startStarfield();
+renderEditor();
