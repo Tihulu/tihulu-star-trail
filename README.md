@@ -175,10 +175,10 @@ tihulu run ./photos ./output --threshold 0.35
 To also keep different shooting sessions apart by metadata time, enable the optional time guard:
 
 ```bash
-tihulu run ./photos ./output --time-metadata --time-window-minutes 360
+tihulu run ./photos ./output --time-metadata --time-window-hours 6
 ```
 
-The default Linux/desktop threshold is `0.42`. The Linux grouping engine now uses mutual ORB feature matches, RANSAC homography inliers, inlier spread across the frame, and homography sanity checks before accepting a same-angle match. The optional time metadata guard uses EXIF capture time when available, then falls back to the file modified time. The GitHub Pages browser app uses a separate browser-only scorer with a default threshold of `0.72`; it compares luminance structure, edge layout, color balance, contrast, and aspect ratio. Its optional time metadata guard uses the browser-provided file modified time. In both apps, higher threshold values are stricter. Most real night-sky sets may still need a little tuning because foreground detail, moonlight, clouds, lens distortion, and exposure settings all affect matching.
+The default Linux/desktop threshold is `0.42`. The Linux grouping engine now uses mutual ORB feature matches, RANSAC homography inliers, inlier spread across the frame, and homography sanity checks before accepting a same-angle match. The optional time metadata guard uses EXIF capture time when available, then falls back to the file modified time. Set its window in hours in the desktop app, local web UI, hosted web app, or CLI with `--time-window-hours`; `--time-window-minutes` still works for older scripts. The GitHub Pages browser app uses a separate browser-only scorer with a default threshold of `0.72`; it compares luminance structure, edge layout, color balance, contrast, and aspect ratio. Its optional time metadata guard uses the browser-provided file modified time. In both apps, higher threshold values are stricter. Most real night-sky sets may still need a little tuning because foreground detail, moonlight, clouds, lens distortion, and exposure settings all affect matching.
 
 ## RAW Files
 

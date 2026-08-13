@@ -34,6 +34,7 @@ def materialize_groups(
         "version": 1,
         "threshold": threshold,
         "time_metadata": time_metadata,
+        "time_window_hours": round(time_window_minutes / 60.0, 4),
         "time_window_minutes": time_window_minutes,
         "link_mode": link_mode,
         "group_count": len(groups),

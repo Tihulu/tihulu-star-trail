@@ -21,7 +21,7 @@ function payload() {
     fps: Number(document.querySelector("#fps").value),
     video_max_side: Number(document.querySelector("#videoMaxSide").value),
     max_side: Number(document.querySelector("#maxSide").value),
-    time_window_minutes: Number(document.querySelector("#timeWindowMinutes").value),
+    time_window_hours: Number(document.querySelector("#timeWindowHours").value),
     link_mode: document.querySelector("#linkMode").value,
     codec: "mp4v"
   };

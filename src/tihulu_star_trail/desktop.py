@@ -13,7 +13,7 @@ from .defaults import (
     DEFAULT_MAX_SIDE,
     DEFAULT_MIN_MATCHES,
     DEFAULT_TIME_METADATA,
-    DEFAULT_TIME_WINDOW_MINUTES,
+    DEFAULT_TIME_WINDOW_HOURS,
 )
 from .engine import execute_action, scan_images
 
@@ -92,7 +92,7 @@ class TihuluDesktopApp:
         self.fps = tk.StringVar(value="24")
         self.video_max_side = tk.StringVar(value="1920")
         self.max_side = tk.StringVar(value=str(DEFAULT_MAX_SIDE))
-        self.time_window_minutes = tk.StringVar(value=str(DEFAULT_TIME_WINDOW_MINUTES))
+        self.time_window_hours = tk.StringVar(value=str(DEFAULT_TIME_WINDOW_HOURS))
         self.link_mode = tk.StringVar(value="symlink")
         self.state = tk.StringVar(value="READY")
         self.result = tk.StringVar(value="No result yet")
@@ -240,7 +240,7 @@ class TihuluDesktopApp:
             ("FPS", self.fps, 1, 120, 1),
             ("Video Max Side", self.video_max_side, 0, 8192, 64),
             ("Feature Side", self.max_side, 200, 4000, 50),
-            ("Time Window Min", self.time_window_minutes, 1, 43200, 30),
+            ("Time Window Hours", self.time_window_hours, 0.1, 720, 0.5),
         ]
         for index, (label, variable, from_, to, increment) in enumerate(settings):
             r, c = divmod(index, 3)
@@ -364,7 +364,7 @@ class TihuluDesktopApp:
             "video_max_side": int(float(self.video_max_side.get())),
             "max_side": int(float(self.max_side.get())),
             "time_metadata": self.time_metadata.get(),
-            "time_window_minutes": float(self.time_window_minutes.get()),
+            "time_window_hours": float(self.time_window_hours.get()),
             "link_mode": self.link_mode.get(),
             "codec": "mp4v",
         }

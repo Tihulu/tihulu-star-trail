@@ -167,10 +167,16 @@ def add_grouping_options(parser: argparse.ArgumentParser) -> None:
         help="also require nearby EXIF or file metadata times when grouping",
     )
     parser.add_argument(
+        "--time-window-hours",
+        type=float,
+        default=None,
+        help="maximum metadata time gap in hours; overrides --time-window-minutes",
+    )
+    parser.add_argument(
         "--time-window-minutes",
         type=float,
         default=DEFAULT_TIME_WINDOW_MINUTES,
-        help="maximum metadata time gap allowed for same-group photos",
+        help="maximum metadata time gap in minutes, kept for scripts",
     )
     parser.add_argument(
         "--recursive",
@@ -251,7 +257,7 @@ def run_command(args: argparse.Namespace) -> int:
         max_side=args.max_side,
         nfeatures=args.nfeatures,
         time_metadata=args.time_metadata,
-        time_window_minutes=args.time_window_minutes,
+        time_window_minutes=_time_window_minutes(args),
         progress=progress,
     )
     manifest_path = materialize_groups(
@@ -260,7 +266,7 @@ def run_command(args: argparse.Namespace) -> int:
         link_mode=args.link_mode,
         threshold=args.threshold,
         time_metadata=args.time_metadata,
-        time_window_minutes=args.time_window_minutes,
+        time_window_minutes=_time_window_minutes(args),
     )
     rendered = render_group_trails(
         groups,
@@ -300,7 +306,7 @@ def group_command(args: argparse.Namespace) -> int:
         max_side=args.max_side,
         nfeatures=args.nfeatures,
         time_metadata=args.time_metadata,
-        time_window_minutes=args.time_window_minutes,
+        time_window_minutes=_time_window_minutes(args),
         progress=progress,
     )
     manifest_path = materialize_groups(
@@ -309,7 +315,7 @@ def group_command(args: argparse.Namespace) -> int:
         link_mode=args.link_mode,
         threshold=args.threshold,
         time_metadata=args.time_metadata,
-        time_window_minutes=args.time_window_minutes,
+        time_window_minutes=_time_window_minutes(args),
     )
     print(f"Created {len(groups)} group(s) and {manifest_path}", file=sys.stderr)
     return 0
@@ -408,6 +414,13 @@ def _load_images(path: Path, recursive: bool) -> list[Path]:
     if not paths:
         raise ValueError(f"No supported images found in {path}")
     return paths
+
+
+def _time_window_minutes(args: argparse.Namespace) -> float:
+    hours = getattr(args, "time_window_hours", None)
+    if hours is not None:
+        return float(hours) * 60.0
+    return float(args.time_window_minutes)
 
 
 def _optional_max_side(value: int) -> int | None:

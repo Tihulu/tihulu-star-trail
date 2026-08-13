@@ -4,7 +4,7 @@ const analyzeButton = document.querySelector("#analyzeButton");
 const trailButton = document.querySelector("#trailButton");
 const timelapseButton = document.querySelector("#timelapseButton");
 const timeMetadataToggle = document.querySelector("#timeMetadata");
-const timeWindowInput = document.querySelector("#timeWindowMinutes");
+const timeWindowInput = document.querySelector("#timeWindowHours") || document.querySelector("#timeWindowMinutes");
 const logOutput = document.querySelector("#logOutput");
 const groupsPanel = document.querySelector("#groupsPanel");
 const groupTitle = document.querySelector("#groupTitle");
@@ -52,7 +52,7 @@ function settings() {
   const imageQuality = clamp(Number(document.querySelector("#imageQuality").value), 1, 100);
   const videoFormat = document.querySelector("#videoFormat").value;
   const videoQualityMbps = clamp(Number(document.querySelector("#videoQuality").value), 0.5, 50);
-  const timeWindowMinutes = clamp(Number(timeWindowInput.value), 1, 43200);
+  const timeWindowHours = clamp(Number(timeWindowInput.value), 0.1, 720);
   return {
     threshold: Number(document.querySelector("#threshold").value),
     thumbSide: Number(document.querySelector("#thumbSide").value),
@@ -68,8 +68,8 @@ function settings() {
     videoQualityMbps,
     videoBitsPerSecond: Math.round(videoQualityMbps * 1000000),
     useTimeMetadata: timeMetadataToggle.checked,
-    timeWindowMinutes,
-    timeWindowMs: timeWindowMinutes * 60000
+    timeWindowHours,
+    timeWindowMs: timeWindowHours * 60 * 60000
   };
 }
 

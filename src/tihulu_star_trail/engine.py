@@ -50,9 +50,7 @@ def execute_action(payload: dict[str, Any], progress: Progress | None = None) ->
     max_side = int(payload.get("max_side", DEFAULT_MAX_SIDE))
     nfeatures = int(payload.get("nfeatures", DEFAULT_NFEATURES))
     time_metadata = bool(payload.get("time_metadata", DEFAULT_TIME_METADATA))
-    time_window_minutes = float(
-        payload.get("time_window_minutes", DEFAULT_TIME_WINDOW_MINUTES)
-    )
+    time_window_minutes = _payload_time_window_minutes(payload)
     fps = float(payload.get("fps", 24.0))
     video_max_side = _optional_max_side(int(payload.get("video_max_side", 1920)))
     codec = str(payload.get("codec", "mp4v"))
@@ -65,8 +63,9 @@ def execute_action(payload: dict[str, Any], progress: Progress | None = None) ->
         if progress is not None:
             progress(f"Loaded {len(paths)} image(s)")
             if time_metadata:
+                time_window_hours = time_window_minutes / 60.0
                 progress(
-                    f"Time metadata guard enabled ({time_window_minutes:g} minute window)"
+                    f"Time metadata guard enabled ({time_window_hours:g} hour window)"
                 )
         groups = build_angle_groups(
             paths,
@@ -152,6 +151,12 @@ def execute_action(payload: dict[str, Any], progress: Progress | None = None) ->
         return {"timelapses": [str(video)]}
 
     raise ValueError(f"Unknown action: {action}")
+
+
+def _payload_time_window_minutes(payload: dict[str, Any]) -> float:
+    if "time_window_hours" in payload:
+        return float(payload["time_window_hours"]) * 60.0
+    return float(payload.get("time_window_minutes", DEFAULT_TIME_WINDOW_MINUTES))
 
 
 def _payload_path(payload: dict[str, Any], name: str) -> Path:
