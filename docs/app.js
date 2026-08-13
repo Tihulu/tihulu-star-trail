@@ -26,6 +26,11 @@ const groupNameInput = document.querySelector("#groupNameInput");
 const renameGroupButton = document.querySelector("#renameGroupButton");
 const addGroupButton = document.querySelector("#addGroupButton");
 const filmstripCount = document.querySelector("#filmstripCount");
+const selectionCount = document.querySelector("#selectionCount");
+const selectionModeButton = document.querySelector("#selectionModeButton");
+const selectAllButton = document.querySelector("#selectAllButton");
+const clearSelectionButton = document.querySelector("#clearSelectionButton");
+const removeSelectedButton = document.querySelector("#removeSelectedButton");
 const photoStrip = document.querySelector("#photoStrip");
 
 let files = [];
@@ -38,6 +43,11 @@ let photoPreviewFile = null;
 let canvasPreviewToken = 0;
 let photoStripKey = "";
 let undoStack = [];
+let editSelectionMode = false;
+let selectedPhotoKeys = new Set();
+let dragSelection = null;
+let dragPayload = null;
+let suppressPhotoClick = false;
 
 const SIGNATURE_CELLS = 12;
 const MAX_UNDO_STATES = 50;
@@ -120,6 +130,10 @@ function chooseFiles(nextFiles) {
   selectedGroup = 0;
   selectedPhotoIndex = 0;
   undoStack = [];
+  editSelectionMode = false;
+  selectedPhotoKeys.clear();
+  dragSelection = null;
+  dragPayload = null;
   photoStripKey = "";
   clearDownload();
   groupsPanel.innerHTML = "";
@@ -198,6 +212,9 @@ analyzeButton.addEventListener("click", async () => {
     selectedGroup = 0;
     selectedPhotoIndex = 0;
     undoStack = [];
+    selectedPhotoKeys.clear();
+    dragSelection = null;
+    dragPayload = null;
     photoStripKey = "";
     renderGroups();
     renderEditor();
@@ -258,6 +275,28 @@ movePhotoButton.addEventListener("click", async () => {
 
 removePhotoButton.addEventListener("click", async () => {
   await removeSelectedPhoto();
+});
+
+selectionModeButton?.addEventListener("click", () => {
+  editSelectionMode = !editSelectionMode;
+  syncPhotoStripSelection();
+  renderSelectionControls();
+});
+
+selectAllButton?.addEventListener("click", () => {
+  selectAllVisiblePhotos();
+});
+
+clearSelectionButton?.addEventListener("click", () => {
+  clearSelectedPhotos();
+});
+
+removeSelectedButton?.addEventListener("click", async () => {
+  await removeSelectedPhoto();
+});
+
+document.addEventListener("pointerup", () => {
+  dragSelection = null;
 });
 
 undoButton.addEventListener("click", async () => {
@@ -534,6 +573,7 @@ async function renderGroups() {
     card.type = "button";
     card.disabled = isBusy;
     card.className = `group-card${index === selectedGroup ? " active" : ""}`;
+    card.dataset.groupIndex = String(index);
 
     const title = document.createElement("strong");
     title.textContent = groupLabel(index);
@@ -552,15 +592,62 @@ async function renderGroups() {
     }
 
     card.append(title, meta, strip);
+    attachGroupDropHandlers(card, String(index));
     card.addEventListener("click", async () => {
       selectedGroup = index;
       selectedPhotoIndex = 0;
+      selectedPhotoKeys.clear();
+      dragPayload = null;
       renderGroups();
       renderEditor();
       await previewCurrentPhoto();
     });
     groupsPanel.appendChild(card);
   }
+
+  if (groups.length) {
+    const newGroupCard = document.createElement("button");
+    newGroupCard.type = "button";
+    newGroupCard.disabled = isBusy;
+    newGroupCard.className = "group-card new-group-drop";
+    const title = document.createElement("strong");
+    title.textContent = "NEW GROUP";
+    const meta = document.createElement("span");
+    meta.textContent = "Drop selected photo(s)";
+    newGroupCard.append(title, meta);
+    attachGroupDropHandlers(newGroupCard, "new");
+    newGroupCard.addEventListener("click", async () => {
+      await addManualGroup();
+    });
+    groupsPanel.appendChild(newGroupCard);
+  }
+}
+
+function attachGroupDropHandlers(card, targetValue) {
+  card.addEventListener("dragover", (event) => {
+    if (!canDropToGroup(targetValue)) return;
+    event.preventDefault();
+    card.classList.add("drop-target");
+  });
+  card.addEventListener("dragleave", () => {
+    card.classList.remove("drop-target");
+  });
+  card.addEventListener("drop", async (event) => {
+    if (!canDropToGroup(targetValue)) return;
+    event.preventDefault();
+    card.classList.remove("drop-target");
+    await movePhotoKeysToGroup(dragPayload.sourceGroup, dragPayload.keys, targetValue);
+  });
+}
+
+function canDropToGroup(targetValue) {
+  if (!dragPayload || isBusy) return false;
+  if (targetValue === "new") return dragPayload.keys.length > 0;
+  const targetIndex = Number(targetValue);
+  return Number.isInteger(targetIndex)
+    && groups[targetIndex]
+    && targetIndex !== dragPayload.sourceGroup
+    && dragPayload.keys.length > 0;
 }
 
 function renderEditor() {
@@ -576,6 +663,7 @@ function renderEditor() {
   groupNameInput.value = hasGroup ? groupLabel(selectedGroup) : "";
   setPhotoPreview(hasPhoto ? selected[selectedPhotoIndex] : null);
   renderPhotoStrip();
+  renderSelectionControls();
 
   previousPhotoButton.disabled = isBusy || selected.length < 2;
   nextPhotoButton.disabled = isBusy || selected.length < 2;
@@ -604,6 +692,9 @@ function renderEditor() {
     option.textContent = files.length ? "Create Group First" : "Analyze First";
     targetGroup.appendChild(option);
   }
+  const selectedCount = activeSelectedKeys().length;
+  movePhotoButton.textContent = selectedCount ? "Move Selected" : "Move Photo";
+  removePhotoButton.textContent = selectedCount ? "Remove Selected" : "Remove";
   movePhotoButton.disabled = isBusy || !hasPhoto || !groups.length || !targetGroup.value;
   targetGroup.disabled = isBusy || !hasPhoto || !groups.length;
 }
@@ -634,58 +725,130 @@ async function selectPhoto(nextIndex) {
   await previewCurrentPhoto();
 }
 
+function actionPhotoKeys() {
+  const keys = activeSelectedKeys();
+  if (keys.length) return keys;
+  const file = activeFiles()[selectedPhotoIndex];
+  return file ? [fileKey(file)] : [];
+}
+
+function activeSelectedKeys() {
+  const visibleKeys = new Set(activeFiles().map(fileKey));
+  return Array.from(selectedPhotoKeys).filter((key) => visibleKeys.has(key));
+}
+
+function firstSelectedPhotoIndex(selected) {
+  const index = selected.findIndex((file) => selectedPhotoKeys.has(fileKey(file)));
+  return Math.max(index, 0);
+}
+
+function selectAllVisiblePhotos() {
+  for (const file of activeFiles()) {
+    selectedPhotoKeys.add(fileKey(file));
+  }
+  syncPhotoStripSelection();
+  renderSelectionControls();
+}
+
+function clearSelectedPhotos() {
+  selectedPhotoKeys.clear();
+  syncPhotoStripSelection();
+  renderSelectionControls();
+}
+
+function setPhotoSelection(file, selected) {
+  const key = fileKey(file);
+  if (selected) selectedPhotoKeys.add(key);
+  else selectedPhotoKeys.delete(key);
+  syncPhotoStripSelection();
+  renderSelectionControls();
+}
+
 async function moveSelectedPhoto() {
-  const sourceGroup = activeGroup();
-  const selected = activeFiles();
-  const file = selected[selectedPhotoIndex];
-  if (!sourceGroup || !file || !targetGroup.value) return;
+  if (!targetGroup.value) return;
+  await movePhotoKeysToGroup(selectedGroup, actionPhotoKeys(), targetGroup.value);
+}
 
-  const targetValue = targetGroup.value;
-  const targetIndexBeforeMove = targetValue === "new" ? groups.length : Number(targetValue);
-  if (targetValue !== "new" && (!groups[targetIndexBeforeMove] || targetIndexBeforeMove === selectedGroup)) return;
+async function movePhotoKeysToGroup(sourceGroupIndex, keys, targetValue) {
+  const sourceGroup = groups[sourceGroupIndex];
+  if (!sourceGroup || !keys.length) return;
 
-  pushUndo(`move ${file.name}`);
-  const sourceIndex = selectedPhotoIndex;
-  const [movedFile] = sourceGroup.files.splice(sourceIndex, 1);
-  const [movedScore] = sourceGroup.scores.splice(sourceIndex, 1);
+  const targetIsNew = targetValue === "new";
+  let targetIndex = targetIsNew ? groups.length : Number(targetValue);
+  if (!targetIsNew && (!groups[targetIndex] || targetIndex === sourceGroupIndex)) return;
 
-  let targetIndex = targetIndexBeforeMove;
-  if (targetValue === "new") {
-    groups.push(createManualGroup({files: [movedFile], scores: [movedScore ?? 1]}));
-  } else {
-    groups[targetIndex].files.push(movedFile);
-    groups[targetIndex].scores.push(movedScore ?? 1);
+  const keySet = new Set(keys);
+  const moving = [];
+  for (const [index, file] of sourceGroup.files.entries()) {
+    if (keySet.has(fileKey(file))) {
+      moving.push({file, score: sourceGroup.scores[index] ?? 1});
+    }
+  }
+  if (!moving.length) return;
+
+  pushUndo(`move ${moving.length} photo(s)`);
+  const remainingFiles = [];
+  const remainingScores = [];
+  for (const [index, file] of sourceGroup.files.entries()) {
+    if (!keySet.has(fileKey(file))) {
+      remainingFiles.push(file);
+      remainingScores.push(sourceGroup.scores[index] ?? 1);
+    }
+  }
+  sourceGroup.files = remainingFiles;
+  sourceGroup.scores = remainingScores;
+
+  const movedFiles = moving.map((item) => item.file);
+  const movedScores = moving.map((item) => item.score);
+  if (!sourceGroup.files.length) {
+    groups.splice(sourceGroupIndex, 1);
+    if (!targetIsNew && targetIndex > sourceGroupIndex) targetIndex -= 1;
   }
 
-  if (!sourceGroup.files.length) {
-    const removedIndex = selectedGroup;
-    groups.splice(removedIndex, 1);
-    if (targetIndex > removedIndex) targetIndex -= 1;
+  if (targetIsNew) {
+    groups.push(createManualGroup({files: movedFiles, scores: movedScores}));
+    targetIndex = groups.length - 1;
+  } else {
+    groups[targetIndex].files.push(...movedFiles);
+    groups[targetIndex].scores.push(...movedScores);
   }
 
   selectedGroup = Math.min(Math.max(targetIndex, 0), Math.max(groups.length - 1, 0));
-  selectedPhotoIndex = Math.max(activeFiles().length - 1, 0);
-  refreshGroupsAfterEdit(`Moved ${movedFile.name} to ${groups.length ? groupLabel(selectedGroup) : "a group"}.`);
+  selectedPhotoKeys = new Set(movedFiles.map(fileKey));
+  selectedPhotoIndex = firstSelectedPhotoIndex(activeFiles());
+  dragPayload = null;
+  refreshGroupsAfterEdit(`Moved ${moving.length} photo(s) to ${groupLabel(selectedGroup)}.`);
   await previewCurrentPhoto();
 }
 
 async function removeSelectedPhoto() {
-  const selected = activeFiles();
-  const file = selected[selectedPhotoIndex];
-  if (!file) return;
+  const keys = actionPhotoKeys();
+  if (!keys.length) return;
 
-  pushUndo(`remove ${file.name}`);
-  files = files.filter((item) => item !== file);
-  if (groups.length) {
-    const group = activeGroup();
-    group.files.splice(selectedPhotoIndex, 1);
-    group.scores.splice(selectedPhotoIndex, 1);
-    groups = groups.filter((item) => item.files.length);
+  const keySet = new Set(keys);
+  const removedCount = files.filter((file) => keySet.has(fileKey(file))).length;
+  if (!removedCount) return;
+
+  pushUndo(`remove ${removedCount} photo(s)`);
+  files = files.filter((file) => !keySet.has(fileKey(file)));
+  for (const group of groups) {
+    const nextFiles = [];
+    const nextScores = [];
+    for (const [index, file] of group.files.entries()) {
+      if (!keySet.has(fileKey(file))) {
+        nextFiles.push(file);
+        nextScores.push(group.scores[index] ?? 1);
+      }
+    }
+    group.files = nextFiles;
+    group.scores = nextScores;
   }
-
+  groups = groups.filter((item) => item.files.length || item.manual);
+  selectedPhotoKeys.clear();
+  dragPayload = null;
   selectedGroup = Math.min(selectedGroup, Math.max(groups.length - 1, 0));
   selectedPhotoIndex = Math.min(selectedPhotoIndex, Math.max(activeFiles().length - 1, 0));
-  refreshGroupsAfterEdit(`Removed ${file.name} from the working set.`);
+  refreshGroupsAfterEdit(`Removed ${removedCount} photo(s) from the working set.`);
   await previewCurrentPhoto();
 }
 
@@ -698,6 +861,8 @@ async function addManualGroup() {
   groups.push(createManualGroup());
   selectedGroup = groups.length - 1;
   selectedPhotoIndex = 0;
+  selectedPhotoKeys.clear();
+  dragPayload = null;
   refreshGroupsAfterEdit(`Added ${groupLabel(selectedGroup)}.`);
   await previewCurrentPhoto();
 }
@@ -722,6 +887,10 @@ async function undoLastEdit() {
   groups = snapshot.groups;
   selectedGroup = snapshot.selectedGroup;
   selectedPhotoIndex = snapshot.selectedPhotoIndex;
+  selectedPhotoKeys = new Set(snapshot.selectedPhotoKeys || []);
+  editSelectionMode = Boolean(snapshot.editSelectionMode);
+  dragSelection = null;
+  dragPayload = null;
   photoStripKey = "";
   renderGroups();
   renderEditor();
@@ -735,7 +904,9 @@ function pushUndo(label) {
     files: files.slice(),
     groups: groups.map(cloneGroup),
     selectedGroup,
-    selectedPhotoIndex
+    selectedPhotoIndex,
+    selectedPhotoKeys: Array.from(selectedPhotoKeys),
+    editSelectionMode
   });
   if (undoStack.length > MAX_UNDO_STATES) undoStack.shift();
 }
@@ -828,6 +999,18 @@ function groupSummary(group) {
   return `${group.files.length} frame(s) / ${score === null ? "manual" : score.toFixed(2)}`;
 }
 
+function renderSelectionControls() {
+  if (!selectionCount || !selectionModeButton || !selectAllButton || !clearSelectionButton || !removeSelectedButton) return;
+  const selectedCountValue = activeSelectedKeys().length;
+  selectionCount.textContent = `${selectedCountValue} selected`;
+  selectionModeButton.textContent = editSelectionMode ? "Done" : "Edit";
+  selectionModeButton.classList.toggle("active", editSelectionMode);
+  selectionModeButton.disabled = isBusy || !activeFiles().length;
+  selectAllButton.disabled = isBusy || !activeFiles().length;
+  clearSelectionButton.disabled = isBusy || !selectedCountValue;
+  removeSelectedButton.disabled = isBusy || !selectedCountValue;
+}
+
 function renderPhotoStrip() {
   const selected = activeFiles();
   filmstripCount.textContent = `${selected.length} photo(s)`;
@@ -853,6 +1036,7 @@ function renderPhotoStrip() {
     button.disabled = isBusy;
     button.className = "photo-thumb";
     button.dataset.index = String(index);
+    button.dataset.key = fileKey(file);
 
     const image = document.createElement("img");
     image.alt = "";
@@ -863,18 +1047,114 @@ function renderPhotoStrip() {
     const label = document.createElement("span");
     label.textContent = file.name;
     button.append(image, label);
-    button.addEventListener("click", async () => {
-      await selectPhoto(index);
+    button.addEventListener("pointerdown", (event) => {
+      handlePhotoPointerDown(event, index, file);
+    });
+    button.addEventListener("pointerenter", () => {
+      handlePhotoPointerEnter(index, file);
+    });
+    button.addEventListener("click", async (event) => {
+      await handlePhotoClick(event, index, file);
+    });
+    button.addEventListener("dragstart", (event) => {
+      handlePhotoDragStart(event, index, file);
+    });
+    button.addEventListener("dragend", () => {
+      handlePhotoDragEnd();
     });
     photoStrip.appendChild(button);
   }
   syncPhotoStripSelection();
 }
 
+function handlePhotoPointerDown(event, index, file) {
+  if (event.button !== 0 || isBusy || !editSelectionMode) return;
+  event.preventDefault();
+  suppressPhotoClick = true;
+  const key = fileKey(file);
+  const shouldSelect = !selectedPhotoKeys.has(key);
+  dragSelection = {shouldSelect, touched: new Set()};
+  applyDragSelection(file);
+  focusStripPhoto(index, file, {preview: true});
+}
+
+function handlePhotoPointerEnter(index, file) {
+  if (!dragSelection || isBusy || !editSelectionMode) return;
+  applyDragSelection(file);
+  focusStripPhoto(index, file, {preview: false});
+}
+
+async function handlePhotoClick(event, index, file) {
+  if (suppressPhotoClick) {
+    suppressPhotoClick = false;
+    return;
+  }
+  if (editSelectionMode || event.ctrlKey || event.metaKey || event.shiftKey) {
+    event.preventDefault();
+    const key = fileKey(file);
+    setPhotoSelection(file, !selectedPhotoKeys.has(key));
+    focusStripPhoto(index, file, {preview: true});
+    return;
+  }
+  if (selectedPhotoKeys.size) selectedPhotoKeys.clear();
+  await selectPhoto(index);
+}
+
+function applyDragSelection(file) {
+  const key = fileKey(file);
+  if (dragSelection.touched.has(key)) return;
+  dragSelection.touched.add(key);
+  setPhotoSelection(file, dragSelection.shouldSelect);
+}
+
+function focusStripPhoto(index, file, {preview}) {
+  selectedPhotoIndex = index;
+  const selected = activeFiles();
+  photoCounter.textContent = `${selectedPhotoIndex + 1} / ${selected.length}`;
+  photoName.textContent = file.name;
+  setPhotoPreview(file);
+  syncPhotoStripSelection();
+  if (preview) void previewCurrentPhoto();
+}
+
+function handlePhotoDragStart(event, index, file) {
+  if (!groups.length || editSelectionMode || isBusy) {
+    event.preventDefault();
+    return;
+  }
+  const key = fileKey(file);
+  let keys = selectedPhotoKeys.has(key) ? activeSelectedKeys() : [key];
+  if (!keys.length) keys = [key];
+  selectedPhotoKeys = new Set(keys);
+  selectedPhotoIndex = index;
+  dragPayload = {sourceGroup: selectedGroup, keys};
+  event.dataTransfer.effectAllowed = "move";
+  event.dataTransfer.setData("text/plain", `${keys.length} photo(s)`);
+  event.currentTarget.classList.add("dragging");
+  syncPhotoStripSelection();
+  renderSelectionControls();
+}
+
+function handlePhotoDragEnd() {
+  dragPayload = null;
+  for (const button of photoStrip.querySelectorAll(".photo-thumb.dragging")) {
+    button.classList.remove("dragging");
+  }
+  for (const card of groupsPanel.querySelectorAll(".drop-target")) {
+    card.classList.remove("drop-target");
+  }
+}
+
 function syncPhotoStripSelection() {
   const buttons = photoStrip.querySelectorAll(".photo-thumb");
   for (const button of buttons) {
-    button.classList.toggle("active", Number(button.dataset.index) === selectedPhotoIndex);
+    const index = Number(button.dataset.index);
+    const selected = selectedPhotoKeys.has(button.dataset.key);
+    button.classList.toggle("active", index === selectedPhotoIndex);
+    button.classList.toggle("selected", selected);
+    button.classList.toggle("edit-mode", editSelectionMode);
+    button.draggable = Boolean(groups.length && !isBusy && !editSelectionMode);
+    button.setAttribute("aria-pressed", selected ? "true" : "false");
   }
   const activeButton = photoStrip.querySelector(".photo-thumb.active");
   activeButton?.scrollIntoView({block: "nearest", inline: "nearest"});

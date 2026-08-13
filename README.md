@@ -15,7 +15,7 @@ The grouping step uses OpenCV feature matching and a RANSAC homography check. In
 - Groups images by likely camera angle.
 - Optionally uses EXIF capture time or file modified time to keep different sessions apart.
 - Ignores hidden dot files such as `.DS_Store` or `._IMG_0001.JPG`.
-- Lets the hosted web app browse every photo inside a group, jump by thumbnail, use arrow-key navigation, rename groups, add groups, undo manual edits, move photos between groups, create a new group, or remove photos from the working set.
+- Lets the hosted web app browse every photo inside a group, multi-select thumbnails, drag selected photos between groups, drop photos into a new group, use arrow-key navigation, rename groups, add groups, undo manual edits, move photos between groups, create a new group, or remove photos from the working set.
 - Writes a JSON manifest with group scores and source paths.
 - Creates star trails with a lighten blend, which is the classic pixel-wise maximum stack.
 - Renders MP4 timelapse videos from full folders or detected groups.

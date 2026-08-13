@@ -135,7 +135,14 @@
         <div class="review-window" aria-label="Selected group photos">
           <div class="review-window-head">
             <p class="eyebrow">Group Photos</p>
-            <span id="filmstripCount">0 photo(s)</span>
+            <div class="review-window-actions">
+              <span id="filmstripCount">0 photo(s)</span>
+              <span id="selectionCount">0 selected</span>
+              <button class="ghost compact-button" id="selectionModeButton" type="button">Edit</button>
+              <button class="ghost compact-button" id="selectAllButton" type="button">Select All</button>
+              <button class="ghost compact-button" id="clearSelectionButton" type="button">Clear</button>
+              <button class="ghost compact-button danger" id="removeSelectedButton" type="button">Remove Selected</button>
+            </div>
           </div>
           <div class="photo-strip" id="photoStrip"></div>
         </div>
