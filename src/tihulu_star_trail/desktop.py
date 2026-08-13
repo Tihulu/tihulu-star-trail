@@ -15,7 +15,9 @@ from .defaults import (
     DEFAULT_TIME_METADATA,
     DEFAULT_TIME_WINDOW_HOURS,
 )
-from .engine import execute_action, scan_images
+from .desktop_groups import GroupWorkspace
+from .engine import analyze_groups, execute_action, export_groups, scan_images
+from .images import read_bgr
 
 TK_HINT = "Native desktop app requires Tk. On Debian/Pop!_OS, run: sudo apt install python3-tk tk-dev"
 
@@ -71,11 +73,20 @@ class TihuluDesktopApp:
         self.events: queue.Queue[tuple[str, Any]] = queue.Queue()
         self.worker: threading.Thread | None = None
         self.controls: list[Any] = []
+        self.workspace = GroupWorkspace()
+        self.selected_group = 0
+        self.preview_image: Any = None
+        self.output_preview_image: Any = None
+        self.last_outputs: list[Path] = []
+        self._drag_group_index: int | None = None
+        self._video_capture: Any = None
+        self._video_after: str | None = None
+        self._video_playing = False
 
         root.title("Tihulu Star Trail")
         self._set_window_icon()
-        root.geometry("1180x760")
-        root.minsize(980, 640)
+        root.geometry("1380x900")
+        root.minsize(1080, 700)
         root.configure(bg=BG)
         self._configure_style()
 
@@ -91,7 +102,13 @@ class TihuluDesktopApp:
         self.jpeg_quality = tk.StringVar(value="95")
         self.fps = tk.StringVar(value="24")
         self.video_max_side = tk.StringVar(value="1920")
+        self.video_quality_mbps = tk.StringVar(value="8")
         self.max_side = tk.StringVar(value=str(DEFAULT_MAX_SIDE))
+        self.output_max_side = tk.StringVar(value="1600")
+        self.keep_original_size = tk.BooleanVar(value=False)
+        self.image_format = tk.StringVar(value="jpeg")
+        self.video_format = tk.StringVar(value="mp4")
+        self.output_name = tk.StringVar(value="tihulu-output")
         self.time_window_hours = tk.StringVar(value=str(DEFAULT_TIME_WINDOW_HOURS))
         self.link_mode = tk.StringVar(value="symlink")
         self.state = tk.StringVar(value="READY")
@@ -140,22 +157,34 @@ class TihuluDesktopApp:
     def _build_layout(self) -> None:
         root_frame = self.ttk.Frame(self.root, style="App.TFrame", padding=22)
         root_frame.pack(fill="both", expand=True)
-        root_frame.columnconfigure(0, weight=9)
-        root_frame.columnconfigure(1, weight=11)
+        root_frame.columnconfigure(0, weight=1)
         root_frame.rowconfigure(1, weight=1)
 
         header = self.ttk.Frame(root_frame, style="App.TFrame")
-        header.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, 18))
+        header.grid(row=0, column=0, sticky="ew", pady=(0, 18))
         header.columnconfigure(0, weight=1)
         self.ttk.Label(header, text="TIHULU DESKTOP", style="Eyebrow.TLabel").grid(row=0, column=0, sticky="w")
         self.ttk.Label(header, text="Star Trail Forge", style="Header.TLabel").grid(row=1, column=0, sticky="w")
-        self.ttk.Label(header, textvariable=self.state, style="Status.TLabel").grid(row=0, column=1, rowspan=2, sticky="e")
+        info = self.ttk.Button(header, text="Info", command=self.show_info)
+        info.grid(row=0, column=1, rowspan=2, sticky="e", padx=(0, 12))
+        self.ttk.Label(header, textvariable=self.state, style="Status.TLabel").grid(row=0, column=2, rowspan=2, sticky="e")
 
-        controls = self._panel(root_frame, 1, 0, "Controls")
-        monitor = self._panel(root_frame, 1, 1, "Monitor")
+        notebook = self.ttk.Notebook(root_frame)
+        notebook.grid(row=1, column=0, sticky="nsew")
+        process_tab = self.ttk.Frame(notebook, style="App.TFrame", padding=(0, 10, 0, 0))
+        review_tab = self.ttk.Frame(notebook, style="App.TFrame", padding=(0, 10, 0, 0))
+        notebook.add(process_tab, text="Process & Export")
+        notebook.add(review_tab, text="Manual Review")
+
+        process_tab.columnconfigure(0, weight=9)
+        process_tab.columnconfigure(1, weight=11)
+        process_tab.rowconfigure(0, weight=1)
+
+        controls = self._panel(process_tab, 0, 0, "Controls")
+        monitor = self._panel(process_tab, 0, 1, "Monitor & Output Preview")
         controls.columnconfigure(0, weight=1)
         monitor.columnconfigure(0, weight=1)
-        monitor.rowconfigure(2, weight=1)
+        monitor.rowconfigure(3, weight=1)
 
         self._mode_row(controls, 1)
         self._path_row(controls, 2, "Input Path", self.input_path, self._browse_input)
@@ -167,6 +196,12 @@ class TihuluDesktopApp:
         self.ttk.Label(monitor, text="Current Job", style="PanelTitle.TLabel").grid(row=1, column=0, sticky="w", pady=(4, 10))
         self.result_label = self.ttk.Label(monitor, textvariable=self.result, style="Result.TLabel", wraplength=520, justify="left")
         self.result_label.grid(row=1, column=1, sticky="e", pady=(4, 10))
+        self.output_preview = self.ttk.Label(monitor, text="Completed images and videos appear here.", anchor="center")
+        self.output_preview.grid(row=2, column=0, columnspan=2, sticky="nsew", pady=(0, 10))
+        preview_actions = self.ttk.Frame(monitor, style="Panel.TFrame")
+        preview_actions.grid(row=2, column=0, columnspan=2, sticky="se", padx=8, pady=8)
+        self.ttk.Button(preview_actions, text="Open Output", command=self.open_output).pack(side="left", padx=4)
+        self.ttk.Button(preview_actions, text="Play Video", command=self.play_latest_video).pack(side="left", padx=4)
         self.log = self.tk.Text(
             monitor,
             bg=LOG_BG,
@@ -178,11 +213,12 @@ class TihuluDesktopApp:
             wrap="word",
             font=("JetBrains Mono", 10),
         )
-        self.log.grid(row=2, column=0, columnspan=2, sticky="nsew")
+        self.log.grid(row=3, column=0, columnspan=2, sticky="nsew")
         scrollbar = self.ttk.Scrollbar(monitor, orient="vertical", command=self.log.yview)
-        scrollbar.grid(row=2, column=2, sticky="ns")
+        scrollbar.grid(row=3, column=2, sticky="ns")
         self.log.configure(yscrollcommand=scrollbar.set, state="disabled")
         self._append_log("Awaiting input.")
+        self._build_review_tab(review_tab)
 
     def _panel(self, parent: Any, row: int, column: int, title: str) -> Any:
         frame = self.ttk.Frame(parent, style="Panel.TFrame", padding=18)
@@ -239,7 +275,9 @@ class TihuluDesktopApp:
             ("JPEG Quality", self.jpeg_quality, 1, 100, 1),
             ("FPS", self.fps, 1, 120, 1),
             ("Video Max Side", self.video_max_side, 0, 8192, 64),
+            ("Video Quality Mbps", self.video_quality_mbps, 0.5, 100, 0.5),
             ("Feature Side", self.max_side, 200, 4000, 50),
+            ("Output Max Side", self.output_max_side, 0, 8192, 64),
             ("Time Window Hours", self.time_window_hours, 0.1, 720, 0.5),
         ]
         for index, (label, variable, from_, to, increment) in enumerate(settings):
@@ -249,6 +287,8 @@ class TihuluDesktopApp:
             self.ttk.Label(cell, text=label).grid(row=0, column=0, sticky="w")
             spin = self.ttk.Spinbox(cell, textvariable=variable, from_=from_, to=to, increment=increment, width=12)
             spin.grid(row=1, column=0, sticky="ew", pady=(6, 0))
+            if label == "Output Max Side":
+                self.output_max_side_control = spin
             self.controls.append(spin)
 
         cell = self.ttk.Frame(frame, style="Panel.TFrame")
@@ -264,17 +304,254 @@ class TihuluDesktopApp:
         combo.grid(row=1, column=0, sticky="ew", pady=(6, 0))
         self.controls.append(combo)
 
+        format_cell = self.ttk.Frame(frame, style="Panel.TFrame")
+        format_cell.grid(row=link_row, column=1, sticky="ew", padx=(0, 10), pady=(0, 10))
+        self.ttk.Label(format_cell, text="Image / Video Format").grid(row=0, column=0, sticky="w")
+        image_combo = self.ttk.Combobox(
+            format_cell, textvariable=self.image_format, values=("jpeg", "png"), state="readonly", width=8
+        )
+        image_combo.grid(row=1, column=0, sticky="ew", pady=(6, 0), padx=(0, 6))
+        video_combo = self.ttk.Combobox(
+            format_cell, textvariable=self.video_format, values=("mp4", "webm"), state="readonly", width=8
+        )
+        video_combo.grid(row=1, column=1, sticky="ew", pady=(6, 0))
+        self.controls.extend([image_combo, video_combo])
+
+        size_cell = self.ttk.Frame(frame, style="Panel.TFrame")
+        size_cell.grid(row=link_row, column=2, sticky="ew", pady=(0, 10))
+        keep_original = self.ttk.Checkbutton(
+            size_cell,
+            text="Keep Original Size",
+            variable=self.keep_original_size,
+            command=self._sync_output_size,
+        )
+        keep_original.grid(row=0, column=0, sticky="w")
+        self.ttk.Label(size_cell, text="Output Name").grid(row=1, column=0, sticky="w", pady=(6, 0))
+        output_name = self.ttk.Entry(size_cell, textvariable=self.output_name)
+        output_name.grid(row=2, column=0, sticky="ew", pady=(4, 0))
+        self.controls.extend([keep_original, output_name])
+
     def _action_row(self, parent: Any, row: int) -> None:
         frame = self.ttk.Frame(parent, style="Panel.TFrame")
         frame.grid(row=row, column=0, sticky="ew", pady=(12, 0))
         frame.columnconfigure(0, weight=1)
         self.scan_button = self.ttk.Button(frame, text="Scan", command=self.scan)
+        self.analyze_button = self.ttk.Button(frame, text="Analyze Groups", command=self.analyze)
+        self.export_button = self.ttk.Button(frame, text="Export Edited", command=self.export_edited)
         self.run_button = self.ttk.Button(frame, text="Run", command=self.run, style="Primary.TButton")
         self.open_button = self.ttk.Button(frame, text="Open Output", command=self.open_output)
         self.scan_button.grid(row=0, column=1, padx=(0, 8))
-        self.open_button.grid(row=0, column=2, padx=(0, 8))
-        self.run_button.grid(row=0, column=3)
-        self.controls.extend([self.scan_button, self.run_button, self.open_button])
+        self.analyze_button.grid(row=0, column=2, padx=(0, 8))
+        self.export_button.grid(row=0, column=3, padx=(0, 8))
+        self.open_button.grid(row=0, column=4, padx=(0, 8))
+        self.run_button.grid(row=0, column=5)
+        self.controls.extend([self.scan_button, self.analyze_button, self.export_button, self.run_button, self.open_button])
+
+    def _build_review_tab(self, parent: Any) -> None:
+        parent.columnconfigure(0, weight=3)
+        parent.columnconfigure(1, weight=5)
+        parent.columnconfigure(2, weight=4)
+        parent.rowconfigure(0, weight=1)
+
+        groups_panel = self._panel(parent, 0, 0, "Groups")
+        groups_panel.rowconfigure(1, weight=1)
+        groups_panel.columnconfigure(0, weight=1)
+        self.group_list = self.tk.Listbox(
+            groups_panel,
+            bg=FIELD,
+            fg=TEXT,
+            selectbackground=PINK,
+            selectforeground=TEXT,
+            exportselection=False,
+            activestyle="none",
+        )
+        self.group_list.grid(row=1, column=0, columnspan=4, sticky="nsew")
+        self.group_list.bind("<<ListboxSelect>>", self._on_group_selected)
+        self.group_list.bind("<ButtonPress-1>", self._group_drag_start)
+        self.group_list.bind("<B1-Motion>", self._group_drag_motion)
+        self.ttk.Button(groups_panel, text="Add", command=self.add_group).grid(row=2, column=0, sticky="ew", pady=(8, 0), padx=(0, 4))
+        self.ttk.Button(groups_panel, text="Rename", command=self.rename_group).grid(row=2, column=1, sticky="ew", pady=(8, 0), padx=4)
+        self.ttk.Button(groups_panel, text="↑", command=lambda: self.reorder_group(-1)).grid(row=2, column=2, sticky="ew", pady=(8, 0), padx=4)
+        self.ttk.Button(groups_panel, text="↓", command=lambda: self.reorder_group(1)).grid(row=2, column=3, sticky="ew", pady=(8, 0), padx=(4, 0))
+
+        preview_panel = self._panel(parent, 0, 1, "Photo Preview")
+        preview_panel.rowconfigure(1, weight=1)
+        preview_panel.columnconfigure(0, weight=1)
+        self.photo_preview = self.ttk.Label(preview_panel, text="Analyze groups to review photos.", anchor="center")
+        self.photo_preview.grid(row=1, column=0, columnspan=3, sticky="nsew")
+        self.photo_name = self.ttk.Label(preview_panel, text="", anchor="center")
+        self.photo_name.grid(row=2, column=0, columnspan=3, sticky="ew", pady=(8, 0))
+        self.ttk.Button(preview_panel, text="Previous", command=lambda: self.navigate_photo(-1)).grid(row=3, column=0, sticky="ew", pady=(8, 0), padx=(0, 4))
+        self.ttk.Button(preview_panel, text="Undo", command=self.undo_edit).grid(row=3, column=1, sticky="ew", pady=(8, 0), padx=4)
+        self.ttk.Button(preview_panel, text="Next", command=lambda: self.navigate_photo(1)).grid(row=3, column=2, sticky="ew", pady=(8, 0), padx=(4, 0))
+
+        photos_panel = self._panel(parent, 0, 2, "Group Photos")
+        photos_panel.rowconfigure(1, weight=1)
+        photos_panel.columnconfigure(0, weight=1)
+        self.photo_list = self.tk.Listbox(
+            photos_panel,
+            bg=FIELD,
+            fg=TEXT,
+            selectbackground=CYAN,
+            selectforeground="#02040a",
+            exportselection=False,
+            selectmode="extended",
+            activestyle="none",
+        )
+        self.photo_list.grid(row=1, column=0, columnspan=2, sticky="nsew")
+        self.photo_list.bind("<<ListboxSelect>>", self._on_photo_selected)
+        self.target_group = self.ttk.Combobox(photos_panel, state="readonly")
+        self.target_group.grid(row=2, column=0, sticky="ew", pady=(8, 0), padx=(0, 4))
+        self.ttk.Button(photos_panel, text="Move Selected", command=self.move_selected_photos).grid(row=2, column=1, sticky="ew", pady=(8, 0), padx=(4, 0))
+        self.ttk.Button(photos_panel, text="Select All", command=self.select_all_photos).grid(row=3, column=0, sticky="ew", pady=(8, 0), padx=(0, 4))
+        self.ttk.Button(photos_panel, text="Remove Selected", command=self.remove_selected_photos, style="Danger.TButton").grid(row=3, column=1, sticky="ew", pady=(8, 0), padx=(4, 0))
+
+        self.root.bind("<Left>", lambda _event: self.navigate_photo(-1))
+        self.root.bind("<Right>", lambda _event: self.navigate_photo(1))
+
+    def _sync_output_size(self) -> None:
+        if hasattr(self, "output_max_side_control"):
+            self.output_max_side_control.configure(
+                state="disabled" if self.keep_original_size.get() else "normal"
+            )
+
+    def _group_drag_start(self, event: Any) -> None:
+        self._drag_group_index = self.group_list.nearest(event.y)
+
+    def _group_drag_motion(self, event: Any) -> None:
+        if self._drag_group_index is None or not self.workspace.groups:
+            return
+        target = self.group_list.nearest(event.y)
+        if target == self._drag_group_index:
+            return
+        offset = target - self._drag_group_index
+        self.selected_group = self.workspace.reorder_group(self._drag_group_index, offset)
+        self._drag_group_index = self.selected_group
+        self._render_workspace()
+
+    def _on_group_selected(self, _event: Any = None) -> None:
+        selected = self.group_list.curselection()
+        if not selected:
+            return
+        self.selected_group = int(selected[0])
+        self._render_photos()
+
+    def _on_photo_selected(self, _event: Any = None) -> None:
+        selected = self.photo_list.curselection()
+        if selected:
+            self._show_photo(int(selected[0]), preserve_selection=True)
+
+    def _render_workspace(self) -> None:
+        self.group_list.delete(0, "end")
+        for group in self.workspace.groups:
+            self.group_list.insert("end", f"{group.name}  ({len(group.photos)})")
+        names = [group.name for group in self.workspace.groups]
+        self.target_group.configure(values=names)
+        if self.workspace.groups:
+            self.selected_group = min(self.selected_group, len(self.workspace.groups) - 1)
+            self.group_list.selection_set(self.selected_group)
+            self.target_group.current(self.selected_group)
+        self._render_photos()
+
+    def _render_photos(self) -> None:
+        self.photo_list.delete(0, "end")
+        if not self.workspace.groups:
+            self.photo_preview.configure(image="", text="Analyze groups to review photos.")
+            self.photo_name.configure(text="")
+            return
+        group = self.workspace.groups[self.selected_group]
+        for photo in group.photos:
+            self.photo_list.insert("end", photo.path.name)
+        if group.photos:
+            self.photo_list.selection_set(0)
+            self._show_photo(0)
+        else:
+            self.photo_preview.configure(image="", text="This group is empty.")
+            self.photo_name.configure(text="")
+
+    def _show_photo(self, index: int, preserve_selection: bool = False) -> None:
+        if not self.workspace.groups:
+            return
+        photos = self.workspace.groups[self.selected_group].photos
+        if not photos:
+            return
+        index = max(0, min(index, len(photos) - 1))
+        try:
+            self.preview_image = self._photo_image(photos[index].path, (660, 560))
+        except Exception as error:
+            self.photo_preview.configure(image="", text=f"Preview failed: {error}")
+        else:
+            self.photo_preview.configure(image=self.preview_image, text="")
+        self.photo_name.configure(text=f"{index + 1} / {len(photos)} — {photos[index].path.name}")
+        if not preserve_selection:
+            self.photo_list.selection_clear(0, "end")
+            self.photo_list.selection_set(index)
+        self.photo_list.see(index)
+
+    def _photo_image(self, path: Path, bounds: tuple[int, int]) -> Any:
+        import cv2
+        from PIL import Image, ImageTk
+
+        bgr = read_bgr(path)
+        rgb = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
+        image = Image.fromarray(rgb)
+        image.thumbnail(bounds, Image.Resampling.LANCZOS)
+        return ImageTk.PhotoImage(image)
+
+    def navigate_photo(self, offset: int) -> None:
+        if not self.workspace.groups or not self.workspace.groups[self.selected_group].photos:
+            return
+        selected = self.photo_list.curselection()
+        current = int(selected[0]) if selected else 0
+        self._show_photo((current + offset) % len(self.workspace.groups[self.selected_group].photos))
+
+    def add_group(self) -> None:
+        self.selected_group = self.workspace.add_group()
+        self._render_workspace()
+
+    def rename_group(self) -> None:
+        if not self.workspace.groups:
+            return
+        from tkinter import simpledialog
+
+        current = self.workspace.groups[self.selected_group].name
+        name = simpledialog.askstring("Rename Group", "Group name:", initialvalue=current, parent=self.root)
+        if name is None:
+            return
+        try:
+            self.workspace.rename_group(self.selected_group, name)
+        except ValueError as error:
+            self._show_error(str(error))
+        self._render_workspace()
+
+    def reorder_group(self, offset: int) -> None:
+        if not self.workspace.groups:
+            return
+        self.selected_group = self.workspace.reorder_group(self.selected_group, offset)
+        self._render_workspace()
+
+    def select_all_photos(self) -> None:
+        if self.photo_list.size():
+            self.photo_list.selection_set(0, "end")
+
+    def move_selected_photos(self) -> None:
+        selected = [int(index) for index in self.photo_list.curselection()]
+        target = self.target_group.current()
+        if not selected or target < 0 or target == self.selected_group:
+            return
+        self.workspace.move_photos(self.selected_group, selected, target)
+        self._render_workspace()
+
+    def remove_selected_photos(self) -> None:
+        selected = [int(index) for index in self.photo_list.curselection()]
+        if not selected:
+            return
+        self.workspace.remove_photos(self.selected_group, selected)
+        self._render_workspace()
+
+    def undo_edit(self) -> None:
+        if self.workspace.undo():
+            self._render_workspace()
 
     def _browse_input(self) -> None:
         from tkinter import filedialog
@@ -292,6 +569,15 @@ class TihuluDesktopApp:
 
     def scan(self) -> None:
         self._start_worker("scan")
+
+    def analyze(self) -> None:
+        self._start_worker("analyze")
+
+    def export_edited(self) -> None:
+        if not self.workspace.nonempty_groups():
+            self._show_error("Analyze photos and keep at least one non-empty group before exporting.")
+            return
+        self._start_worker("export")
 
     def run(self) -> None:
         self._start_worker("run")
@@ -321,9 +607,13 @@ class TihuluDesktopApp:
 
         self._clear_log()
         self._set_busy(True)
-        self.state.set("SCANNING" if mode == "scan" else "RUNNING")
+        self.state.set({"scan": "SCANNING", "analyze": "ANALYZING", "export": "EXPORTING"}.get(mode, "RUNNING"))
         self.result.set("Working...")
-        target = self._scan_worker if mode == "scan" else self._run_worker
+        target = {
+            "scan": self._scan_worker,
+            "analyze": self._analyze_worker,
+            "export": self._export_worker,
+        }.get(mode, self._run_worker)
         self.worker = threading.Thread(target=target, args=(payload,), daemon=True)
         self.worker.start()
 
@@ -338,6 +628,23 @@ class TihuluDesktopApp:
     def _run_worker(self, payload: dict[str, Any]) -> None:
         try:
             result = execute_action(payload, progress=lambda message: self.events.put(("log", message)))
+        except Exception as error:
+            self.events.put(("error", error))
+        else:
+            self.events.put(("result", result))
+
+    def _analyze_worker(self, payload: dict[str, Any]) -> None:
+        try:
+            groups = analyze_groups(payload, progress=lambda message: self.events.put(("log", message)))
+        except Exception as error:
+            self.events.put(("error", error))
+        else:
+            self.events.put(("groups", groups))
+
+    def _export_worker(self, payload: dict[str, Any]) -> None:
+        groups = self.workspace.nonempty_groups()
+        try:
+            result = export_groups(groups, payload, progress=lambda message: self.events.put(("log", message)))
         except Exception as error:
             self.events.put(("error", error))
         else:
@@ -360,13 +667,19 @@ class TihuluDesktopApp:
             "min_matches": int(float(self.min_matches.get())),
             "min_frames": int(float(self.min_frames.get())),
             "jpeg_quality": int(float(self.jpeg_quality.get())),
+            "image_format": self.image_format.get(),
+            "output_max_side": 0 if self.keep_original_size.get() else int(float(self.output_max_side.get())),
+            "output_name": self._safe_output_name(self.output_name.get()),
             "fps": float(self.fps.get()),
             "video_max_side": int(float(self.video_max_side.get())),
+            "video_quality_mbps": float(self.video_quality_mbps.get()),
             "max_side": int(float(self.max_side.get())),
             "time_metadata": self.time_metadata.get(),
             "time_window_hours": float(self.time_window_hours.get()),
             "link_mode": self.link_mode.get(),
-            "codec": "mp4v",
+            "codec": "VP90" if self.video_format.get() == "webm" else "mp4v",
+            "video_extension": self.video_format.get(),
+            "render_trails": True,
         }
 
     def _drain_events(self) -> None:
@@ -381,6 +694,12 @@ class TihuluDesktopApp:
                 self._finish("READY", self._format_scan(payload))
             elif kind == "result":
                 self._finish("DONE", self._format_result(payload))
+                self._show_result_preview(payload)
+            elif kind == "groups":
+                self.workspace = GroupWorkspace.from_angle_groups(payload)
+                self.selected_group = 0
+                self._render_workspace()
+                self._finish("READY", f"Analyzed {sum(len(group.photos) for group in payload)} photos into {len(payload)} groups. Open Manual Review to edit them.")
             elif kind == "error":
                 self._finish("ERROR", str(payload))
                 self._show_error(str(payload))
@@ -413,6 +732,25 @@ class TihuluDesktopApp:
             lines.append(f"Manifest: {data['manifest']}")
         return "\n".join(lines) if lines else "Done"
 
+    def _show_result_preview(self, data: dict[str, Any]) -> None:
+        paths = [Path(path) for key in ("trails", "timelapses") for path in data.get(key, [])]
+        self.last_outputs = paths
+        image_path = next((path for path in paths if path.suffix.lower() in {".jpg", ".jpeg", ".png"}), None)
+        if image_path is None:
+            self.output_preview.configure(image="", text="Output completed. Use Open Output or Play Video.")
+            return
+        try:
+            self.output_preview_image = self._photo_image(image_path, (720, 360))
+        except Exception as error:
+            self.output_preview.configure(image="", text=f"Preview failed: {error}")
+        else:
+            self.output_preview.configure(image=self.output_preview_image, text="")
+
+    @staticmethod
+    def _safe_output_name(value: str) -> str:
+        safe = "".join(character if character.isalnum() or character in {"-", "_"} else "-" for character in value.strip())
+        return safe.strip("-_") or "tihulu-output"
+
     def _set_busy(self, is_busy: bool) -> None:
         state = "disabled" if is_busy else "normal"
         for control in self.controls:
@@ -423,6 +761,8 @@ class TihuluDesktopApp:
                     control.configure(state=state)
             except self.tk.TclError:
                 pass
+        if not is_busy:
+            self._sync_output_size()
 
     def _clear_log(self) -> None:
         self.log.configure(state="normal")
@@ -442,7 +782,150 @@ class TihuluDesktopApp:
 
         messagebox.showerror("Tihulu Star Trail", message)
 
+    def show_info(self) -> None:
+        window = self.tk.Toplevel(self.root)
+        window.title("Parameter Guide")
+        window.geometry("780x650")
+        window.configure(bg=BG)
+        text = self.tk.Text(
+            window,
+            bg=PANEL,
+            fg=TEXT,
+            insertbackground=TEXT,
+            relief="flat",
+            wrap="word",
+            padx=22,
+            pady=18,
+            font=("Inter", 11),
+        )
+        text.pack(fill="both", expand=True, padx=16, pady=16)
+        guide = """PARAMETER GUIDE
+
+Threshold
+Higher values make grouping stricter. Lower values keep more visually similar photos together.
+
+Min Matches
+The minimum number of matching visual features used to accept the same camera angle.
+
+Min Frames
+Groups smaller than this are skipped during trail and timelapse export.
+
+Feature Side
+Working resolution for grouping analysis. Larger values can improve matching but use more memory.
+
+Time Window Hours
+Photos taken within this many hours are more likely to stay in the same group when Time Metadata is enabled.
+
+Output Max Side
+Limits the longest edge of trail images. Enable Keep Original Size to export at source dimensions without output resizing.
+
+Image Format / JPEG Quality
+PNG is lossless and larger. JPEG is smaller; higher JPEG quality preserves more faint detail.
+
+Video Format / Video Max Side / FPS
+MP4 is broadly compatible. WebM uses VP9 when the installed OpenCV build supports it. FPS controls playback speed; Video Max Side limits resolution.
+
+Manual Review
+Analyze Groups first. You can rename, add, drag-reorder, move or remove photos, multi-select, navigate with arrow keys, and undo up to 50 edits. Export Edited writes only non-empty groups.
+
+Original photos are never modified.
+"""
+        text.insert("1.0", guide)
+        text.configure(state="disabled")
+
+    def play_latest_video(self) -> None:
+        video_path = next(
+            (path for path in reversed(self.last_outputs) if path.suffix.lower() in {".mp4", ".webm", ".avi"}),
+            None,
+        )
+        if video_path is None:
+            self._show_error("No completed video is available yet.")
+            return
+        self._open_video_player(video_path)
+
+    def _open_video_player(self, path: Path) -> None:
+        import cv2
+
+        self._stop_video()
+        capture = cv2.VideoCapture(str(path))
+        if not capture.isOpened():
+            self._show_error(f"Could not open video: {path}")
+            return
+        self._video_capture = capture
+        self._video_playing = True
+        window = self.tk.Toplevel(self.root)
+        window.title(f"Timelapse Player — {path.name}")
+        window.geometry("900x650")
+        window.configure(bg=BG)
+        self.video_frame = self.ttk.Label(window, text="Loading video...", anchor="center")
+        self.video_frame.pack(fill="both", expand=True, padx=12, pady=12)
+        controls = self.ttk.Frame(window, style="App.TFrame")
+        controls.pack(fill="x", padx=12, pady=(0, 12))
+        self.video_toggle = self.ttk.Button(controls, text="Pause", command=self._toggle_video)
+        self.video_toggle.pack(side="left")
+        self.ttk.Button(controls, text="Restart", command=self._restart_video).pack(side="left", padx=8)
+        frame_count = max(int(capture.get(cv2.CAP_PROP_FRAME_COUNT)), 1)
+        self.video_seek = self.ttk.Scale(controls, from_=0, to=frame_count - 1, command=self._seek_video)
+        self.video_seek.pack(side="left", fill="x", expand=True, padx=(8, 0))
+        window.protocol("WM_DELETE_WINDOW", lambda: (self._stop_video(), window.destroy()))
+        self._video_tick()
+
+    def _video_tick(self) -> None:
+        if self._video_capture is None or not self._video_playing:
+            return
+        import cv2
+        from PIL import Image, ImageTk
+
+        ok, frame = self._video_capture.read()
+        if not ok:
+            self._video_capture.set(cv2.CAP_PROP_POS_FRAMES, 0)
+            ok, frame = self._video_capture.read()
+        if ok:
+            rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            image = Image.fromarray(rgb)
+            image.thumbnail((860, 540), Image.Resampling.LANCZOS)
+            self._video_image = ImageTk.PhotoImage(image)
+            self.video_frame.configure(image=self._video_image, text="")
+            self.video_seek.set(self._video_capture.get(cv2.CAP_PROP_POS_FRAMES))
+        fps = self._video_capture.get(cv2.CAP_PROP_FPS) or 24.0
+        self._video_after = self.root.after(max(15, int(1000 / fps)), self._video_tick)
+
+    def _toggle_video(self) -> None:
+        self._video_playing = not self._video_playing
+        self.video_toggle.configure(text="Pause" if self._video_playing else "Play")
+        if self._video_playing:
+            self._video_tick()
+
+    def _restart_video(self) -> None:
+        if self._video_capture is not None:
+            import cv2
+
+            self._video_capture.set(cv2.CAP_PROP_POS_FRAMES, 0)
+            if not self._video_playing:
+                self._video_playing = True
+                self.video_toggle.configure(text="Pause")
+                self._video_tick()
+
+    def _seek_video(self, value: str) -> None:
+        if self._video_capture is not None:
+            import cv2
+
+            self._video_capture.set(cv2.CAP_PROP_POS_FRAMES, int(float(value)))
+
+    def _stop_video(self) -> None:
+        if self._video_after is not None:
+            try:
+                self.root.after_cancel(self._video_after)
+            except self.tk.TclError:
+                pass
+            self._video_after = None
+        if self._video_capture is not None:
+            self._video_capture.release()
+            self._video_capture = None
+        self._video_playing = False
+
     def close(self) -> None:
+        self._stop_video()
         try:
             self.root.destroy()
         except self.tk.TclError:

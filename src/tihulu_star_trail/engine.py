@@ -27,6 +27,70 @@ from .stacker import (
 Progress = Callable[[str], None]
 
 
+def analyze_groups(
+    payload: dict[str, Any], progress: Progress | None = None
+) -> list[Any]:
+    input_path = _payload_path(payload, "input")
+    paths = list_images(input_path, recursive=bool(payload.get("recursive", True)))
+    if not paths:
+        raise ValueError(f"No supported images found in {input_path}")
+    return build_angle_groups(
+        paths,
+        threshold=float(payload.get("threshold", DEFAULT_GROUPING_THRESHOLD)),
+        min_matches=int(payload.get("min_matches", DEFAULT_MIN_MATCHES)),
+        max_side=int(payload.get("max_side", DEFAULT_MAX_SIDE)),
+        nfeatures=int(payload.get("nfeatures", DEFAULT_NFEATURES)),
+        time_metadata=bool(payload.get("time_metadata", DEFAULT_TIME_METADATA)),
+        time_window_minutes=_payload_time_window_minutes(payload),
+        progress=progress,
+    )
+
+
+def export_groups(
+    groups: list[Any], payload: dict[str, Any], progress: Progress | None = None
+) -> dict[str, Any]:
+    if not groups:
+        raise ValueError("No non-empty groups are available to export.")
+    output_path = _payload_path(payload, "output")
+    threshold = float(payload.get("threshold", DEFAULT_GROUPING_THRESHOLD))
+    time_metadata = bool(payload.get("time_metadata", DEFAULT_TIME_METADATA))
+    time_window_minutes = _payload_time_window_minutes(payload)
+    manifest = materialize_groups(
+        groups,
+        output_path,
+        link_mode=str(payload.get("link_mode", "symlink")),
+        threshold=threshold,
+        time_metadata=time_metadata,
+        time_window_minutes=time_window_minutes,
+    )
+    result: dict[str, Any] = {"groups": len(groups), "manifest": str(manifest)}
+    if bool(payload.get("render_trails", True)):
+        trails = render_group_trails(
+            groups,
+            output_path / "trails",
+            min_frames=int(payload.get("min_frames", 2)),
+            jpeg_quality=int(payload.get("jpeg_quality", 95)),
+            image_format=str(payload.get("image_format", "jpeg")),
+            max_side=_optional_max_side(int(payload.get("output_max_side", 0))),
+            progress=progress,
+        )
+        result["trails"] = [str(path) for path in trails]
+    if bool(payload.get("timelapse", False)):
+        videos = render_group_timelapses(
+            groups,
+            output_path / "timelapses",
+            min_frames=int(payload.get("min_frames", 2)),
+            fps=float(payload.get("fps", 24.0)),
+            codec=str(payload.get("codec", "mp4v")),
+            max_side=_optional_max_side(int(payload.get("video_max_side", 1920))),
+            video_format=str(payload.get("video_extension", "mp4")),
+            bitrate_mbps=_optional_float(payload.get("video_quality_mbps")),
+            progress=progress,
+        )
+        result["timelapses"] = [str(path) for path in videos]
+    return result
+
+
 def scan_images(payload: dict[str, Any]) -> dict[str, Any]:
     input_path = _payload_path(payload, "input")
     recursive = bool(payload.get("recursive", True))
@@ -95,6 +159,8 @@ def execute_action(payload: dict[str, Any], progress: Progress | None = None) ->
                 output_path / "trails",
                 min_frames=min_frames,
                 jpeg_quality=jpeg_quality,
+                image_format=str(payload.get("image_format", "jpeg")),
+                max_side=_optional_max_side(int(payload.get("output_max_side", 0))),
                 progress=progress,
             )
             result["trails"] = [str(path) for path in trails]
@@ -106,6 +172,8 @@ def execute_action(payload: dict[str, Any], progress: Progress | None = None) ->
                     fps=fps,
                     codec=codec,
                     max_side=video_max_side,
+                    video_format=str(payload.get("video_extension", "mp4")),
+                    bitrate_mbps=_optional_float(payload.get("video_quality_mbps")),
                     progress=progress,
                 )
                 result["timelapses"] = [str(path) for path in videos]
@@ -118,12 +186,23 @@ def execute_action(payload: dict[str, Any], progress: Progress | None = None) ->
                 output_path,
                 min_frames=min_frames,
                 jpeg_quality=jpeg_quality,
+                image_format=str(payload.get("image_format", "jpeg")),
+                max_side=_optional_max_side(int(payload.get("output_max_side", 0))),
                 progress=progress,
             )
             return {"trails": [str(path) for path in trails]}
         paths = list_images(input_path, recursive=recursive)
-        output = output_path if output_path.suffix else output_path / "star_trail.jpg"
-        trail = stack_lighten(paths, output, jpeg_quality=jpeg_quality, progress=progress)
+        image_format = str(payload.get("image_format", "jpeg"))
+        extension = ".png" if image_format.lower() == "png" else ".jpg"
+        filename = str(payload.get("output_name", "star_trail")).strip() or "star_trail"
+        output = output_path if output_path.suffix else output_path / f"{filename}{extension}"
+        trail = stack_lighten(
+            paths,
+            output,
+            jpeg_quality=jpeg_quality,
+            max_side=_optional_max_side(int(payload.get("output_max_side", 0))),
+            progress=progress,
+        )
         return {"trails": [str(trail)]}
 
     if action == "timelapse":
@@ -135,17 +214,22 @@ def execute_action(payload: dict[str, Any], progress: Progress | None = None) ->
                 fps=fps,
                 codec=codec,
                 max_side=video_max_side,
+                video_format=str(payload.get("video_extension", "mp4")),
+                bitrate_mbps=_optional_float(payload.get("video_quality_mbps")),
                 progress=progress,
             )
             return {"timelapses": [str(path) for path in videos]}
         paths = list_images(input_path, recursive=recursive)
-        output = output_path if output_path.suffix else output_path / "timelapse.mp4"
+        filename = str(payload.get("output_name", "timelapse")).strip() or "timelapse"
+        video_extension = str(payload.get("video_extension", "mp4"))
+        output = output_path if output_path.suffix else output_path / f"{filename}.{video_extension}"
         video = render_timelapse(
             paths,
             output,
             fps=fps,
             codec=codec,
             max_side=video_max_side,
+            bitrate_mbps=_optional_float(payload.get("video_quality_mbps")),
             progress=progress,
         )
         return {"timelapses": [str(video)]}
@@ -168,3 +252,10 @@ def _payload_path(payload: dict[str, Any], name: str) -> Path:
 
 def _optional_max_side(value: int) -> int | None:
     return None if value <= 0 else value
+
+
+def _optional_float(value: object) -> float | None:
+    if value is None:
+        return None
+    parsed = float(value)
+    return None if parsed <= 0 else parsed
