@@ -118,7 +118,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     desktop = subcommands.add_parser(
         "desktop",
-        help="launch the native Debian/Pop!_OS desktop app",
+        help="launch the native macOS or Linux desktop app",
     )
     desktop.add_argument(
         "--check",
@@ -442,6 +442,11 @@ def _dependency_error(error: ModuleNotFoundError) -> str:
         "_tkinter": "python3-tk tk-dev",
     }
     apt_name = apt_names.get(package)
+    if sys.platform == "darwin" and package in {"tkinter", "_tkinter"}:
+        return (
+            f"tihulu: missing dependency {package!r}. On macOS, run: "
+            "brew install python@3.12 python-tk@3.12"
+        )
     if apt_name and apt_name.startswith("python3-"):
         return (
             f"tihulu: missing dependency {package!r}. "

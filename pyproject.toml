@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "tihulu-star-trail"
 version = "0.1.0"
-description = "Group night-sky photos by camera angle and build star trail images."
+description = "Group night-sky photos by camera angle and build star trail images on macOS and Linux."
 readme = "README.md"
 requires-python = ">=3.9"
 license = { text = "MIT" }
@@ -19,6 +19,7 @@ classifiers = [
   "Intended Audience :: End Users/Desktop",
   "License :: OSI Approved :: MIT License",
   "Operating System :: POSIX :: Linux",
+  "Operating System :: MacOS :: MacOS X",
   "Programming Language :: Python :: 3",
   "Programming Language :: Python :: 3.9",
   "Programming Language :: Python :: 3.10",
@@ -46,4 +47,3 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 tihulu_star_trail = ["web/*", "assets/*"]
-
