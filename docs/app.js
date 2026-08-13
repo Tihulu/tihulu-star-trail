@@ -41,6 +41,13 @@ let undoStack = [];
 
 const SIGNATURE_CELLS = 12;
 const MAX_UNDO_STATES = 50;
+const DEFAULT_TIME_WINDOW_HOURS = 6;
+const BROWSER_IMAGE_EXTENSIONS = new Set([".jpg", ".jpeg", ".png", ".webp", ".bmp", ".gif", ".avif"]);
+const RAW_EXTENSIONS = new Set([
+  ".3fr", ".arw", ".cr2", ".cr3", ".dcr", ".dng", ".erf", ".kdc",
+  ".mef", ".mos", ".mrw", ".nef", ".nrw", ".orf", ".pef", ".raf",
+  ".raw", ".rwl", ".rw2", ".srw", ".x3f"
+]);
 
 function log(lines) {
   logOutput.textContent = Array.isArray(lines) ? lines.join("\n") : String(lines);
@@ -52,7 +59,7 @@ function settings() {
   const imageQuality = clamp(Number(document.querySelector("#imageQuality").value), 1, 100);
   const videoFormat = document.querySelector("#videoFormat").value;
   const videoQualityMbps = clamp(Number(document.querySelector("#videoQuality").value), 0.5, 50);
-  const timeWindowHours = clamp(Number(timeWindowInput.value), 0.1, 720);
+  const timeWindowHours = clamp(Number(timeWindowInput?.value ?? DEFAULT_TIME_WINDOW_HOURS), 0.1, 720);
   return {
     threshold: Number(document.querySelector("#threshold").value),
     thumbSide: Number(document.querySelector("#thumbSide").value),
@@ -67,7 +74,7 @@ function settings() {
     videoLabel: videoFormat === "video/mp4" ? "MP4" : "WebM",
     videoQualityMbps,
     videoBitsPerSecond: Math.round(videoQualityMbps * 1000000),
-    useTimeMetadata: timeMetadataToggle.checked,
+    useTimeMetadata: Boolean(timeMetadataToggle?.checked),
     timeWindowHours,
     timeWindowMs: timeWindowHours * 60 * 60000
   };
@@ -107,7 +114,8 @@ function activeGroup() {
 }
 
 function chooseFiles(nextFiles) {
-  files = Array.from(nextFiles).filter((file) => file.type.startsWith("image/"));
+  const {accepted, skipped} = filterBrowserFiles(nextFiles);
+  files = accepted;
   groups = [];
   selectedGroup = 0;
   selectedPhotoIndex = 0;
@@ -116,9 +124,49 @@ function chooseFiles(nextFiles) {
   clearDownload();
   groupsPanel.innerHTML = "";
   groupTitle.textContent = files.length ? `${files.length} photo(s)` : "No Photos";
-  log(files.length ? `Loaded ${files.length} browser-readable photo(s).` : "Awaiting input.");
+  const lines = files.length ? [`Loaded ${files.length} browser-readable photo(s).`] : ["Awaiting input."];
+  if (skipped.hidden) lines.push(`Ignored ${skipped.hidden} hidden dot file(s).`);
+  if (skipped.raw) lines.push(`Skipped ${skipped.raw} RAW file(s); use the Linux desktop or local app for RAW.`);
+  if (skipped.unsupported) lines.push(`Skipped ${skipped.unsupported} unsupported file(s).`);
+  log(lines);
   renderEditor();
   void previewCurrentPhoto();
+}
+
+function filterBrowserFiles(nextFiles) {
+  const skipped = {hidden: 0, raw: 0, unsupported: 0};
+  const accepted = [];
+  for (const file of Array.from(nextFiles)) {
+    if (isHiddenFile(file)) {
+      skipped.hidden += 1;
+    } else if (isRawFile(file)) {
+      skipped.raw += 1;
+    } else if (isBrowserReadableImage(file)) {
+      accepted.push(file);
+    } else {
+      skipped.unsupported += 1;
+    }
+  }
+  return {accepted, skipped};
+}
+
+function isHiddenFile(file) {
+  const path = file.webkitRelativePath || file.name;
+  return path.split(/[\\/]/).some((part) => part.startsWith("."));
+}
+
+function isRawFile(file) {
+  return RAW_EXTENSIONS.has(fileExtension(file.name));
+}
+
+function isBrowserReadableImage(file) {
+  const extension = fileExtension(file.name);
+  return BROWSER_IMAGE_EXTENSIONS.has(extension) || (file.type.startsWith("image/") && !extension);
+}
+
+function fileExtension(name) {
+  const index = name.lastIndexOf(".");
+  return index > 0 ? name.slice(index).toLowerCase() : "";
 }
 
 fileInput.addEventListener("change", () => chooseFiles(fileInput.files));
@@ -169,9 +217,9 @@ trailButton.addEventListener("click", async () => {
   clearDownload();
   try {
     const options = settings();
-    const blob = await renderTrail(selected, options);
-    setDownload(URL.createObjectURL(blob), `tihulu-star-trail.${options.imageExtension}`);
-    log(`Trail ready from ${selected.length} frame(s) at ${options.imageFormat.split("/")[1].toUpperCase()} quality ${options.imageQuality}.`);
+    const result = await renderTrail(selected, options);
+    setDownload(URL.createObjectURL(result.blob), `tihulu-star-trail.${options.imageExtension}`);
+    log(`Trail ready from ${result.frameCount} decoded frame(s) at ${options.imageFormat.split("/")[1].toUpperCase()} quality ${options.imageQuality}.`);
   } catch (error) {
     log(error.message || error);
   } finally {
@@ -186,9 +234,9 @@ timelapseButton.addEventListener("click", async () => {
   clearDownload();
   try {
     const options = settings();
-    const blob = await renderTimelapse(selected, options);
-    setDownload(URL.createObjectURL(blob), `tihulu-timelapse.${options.videoExtension}`);
-    log(`Timelapse ${options.videoLabel} ready from ${selected.length} frame(s) at ${options.videoQualityMbps} Mbps.`);
+    const result = await renderTimelapse(selected, options);
+    setDownload(URL.createObjectURL(result.blob), `tihulu-timelapse.${options.videoExtension}`);
+    log(`Timelapse ${options.videoLabel} ready from ${result.frameCount} decoded frame(s) at ${options.videoQualityMbps} Mbps.`);
   } catch (error) {
     log(error.message || error);
   } finally {
@@ -255,7 +303,14 @@ async function groupPhotos(inputFiles, options) {
   const signatures = [];
   for (const [index, file] of groupedFiles.entries()) {
     log(`[${index + 1}/${groupedFiles.length}] analyzing ${file.name}`);
-    signatures.push({file, signature: await imageSignature(file, options.thumbSide)});
+    try {
+      signatures.push({file, signature: await imageSignature(file, options.thumbSide)});
+    } catch (error) {
+      log(`[skip] ${file.name}: ${decodeErrorMessage(error)}`);
+    }
+  }
+  if (!signatures.length) {
+    throw new Error("No browser-decodable photos found. Use JPEG/PNG/WebP/BMP/GIF/AVIF here, or use the Linux desktop/local app for RAW files.");
   }
 
   const detected = [];
@@ -725,7 +780,16 @@ async function previewCurrentPhoto() {
     return;
   }
   const token = (canvasPreviewToken += 1);
-  const bitmap = await decode(current);
+  let bitmap;
+  try {
+    bitmap = await decode(current);
+  } catch (error) {
+    if (token !== canvasPreviewToken) return;
+    const ctx = previewCanvas.getContext("2d");
+    ctx?.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
+    log(`Could not preview ${current.name}: ${decodeErrorMessage(error)}`);
+    return;
+  }
   if (token !== canvasPreviewToken) {
     bitmap.close?.();
     return;
@@ -830,23 +894,32 @@ function isTypingTarget(target) {
 }
 
 async function renderTrail(selected, options) {
-  const first = await decode(selected[0]);
+  const firstFrame = await firstDecodedFrame(selected);
+  const first = firstFrame.bitmap;
   fitCanvas(previewCanvas, first.width, first.height, options.maxSide);
   const width = previewCanvas.width;
   const height = previewCanvas.height;
   const ctx = previewCanvas.getContext("2d", {willReadFrequently: true});
   ctx.drawImage(first, 0, 0, width, height);
   first.close?.();
+  let frameCount = 1;
   let stack = ctx.getImageData(0, 0, width, height);
   const temp = createWorkCanvas(width, height);
   const tempCtx = temp.getContext("2d", {willReadFrequently: true});
 
-  for (let index = 1; index < selected.length; index += 1) {
+  for (let index = firstFrame.index + 1; index < selected.length; index += 1) {
     log(`[${index + 1}/${selected.length}] stacking ${selected[index].name}`);
-    const bitmap = await decode(selected[index]);
+    let bitmap;
+    try {
+      bitmap = await decode(selected[index]);
+    } catch (error) {
+      log(`[skip] ${selected[index].name}: ${decodeErrorMessage(error)}`);
+      continue;
+    }
     tempCtx.clearRect(0, 0, width, height);
     tempCtx.drawImage(bitmap, 0, 0, width, height);
     bitmap.close?.();
+    frameCount += 1;
     const frame = tempCtx.getImageData(0, 0, width, height);
     for (let offset = 0; offset < stack.data.length; offset += 4) {
       stack.data[offset] = Math.max(stack.data[offset], frame.data[offset]);
@@ -858,23 +931,24 @@ async function renderTrail(selected, options) {
     await frameTick();
   }
 
-  return new Promise((resolve, reject) => previewCanvas.toBlob((blob) => {
-    if (blob) resolve(blob);
+  const blob = await new Promise((resolve, reject) => previewCanvas.toBlob((output) => {
+    if (output) resolve(output);
     else reject(new Error("Could not create image output."));
   }, options.imageFormat, options.imageQualityRatio));
+  return {blob, frameCount};
 }
 
 async function renderTimelapse(selected, options) {
   if (!previewCanvas.captureStream || !window.MediaRecorder) {
     throw new Error("This browser cannot record canvas video.");
   }
-  const first = await decode(selected[0]);
-  fitCanvas(previewCanvas, first.width, first.height, options.maxSide);
-  first.close?.();
+  const firstFrame = await firstDecodedFrame(selected);
+  fitCanvas(previewCanvas, firstFrame.bitmap.width, firstFrame.bitmap.height, options.maxSide);
   const ctx = previewCanvas.getContext("2d");
   const stream = previewCanvas.captureStream(options.fps);
   const mimeType = supportedVideoMimeType(options.videoFormat);
   if (!mimeType) {
+    firstFrame.bitmap.close?.();
     stream.getTracks().forEach((track) => track.stop());
     throw new Error(`${options.videoLabel} recording is not supported by this browser. Choose WebM or use the Linux desktop app for MP4 output.`);
   }
@@ -888,36 +962,70 @@ async function renderTimelapse(selected, options) {
   });
   const done = new Promise((resolve) => recorder.addEventListener("stop", resolve, {once: true}));
   recorder.start();
-  for (let index = 0; index < selected.length; index += 1) {
+  let frameCount = 0;
+  for (let index = firstFrame.index; index < selected.length; index += 1) {
     log(`[${index + 1}/${selected.length}] recording ${selected[index].name}`);
-    const bitmap = await decode(selected[index]);
+    let bitmap;
+    if (index === firstFrame.index) {
+      bitmap = firstFrame.bitmap;
+    } else {
+      try {
+        bitmap = await decode(selected[index]);
+      } catch (error) {
+        log(`[skip] ${selected[index].name}: ${decodeErrorMessage(error)}`);
+        continue;
+      }
+    }
     ctx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
     ctx.drawImage(bitmap, 0, 0, previewCanvas.width, previewCanvas.height);
     bitmap.close?.();
+    frameCount += 1;
     await delay(1000 / options.fps);
   }
   recorder.stop();
   await done;
   stream.getTracks().forEach((track) => track.stop());
-  return new Blob(chunks, {type: mimeType});
+  return {blob: new Blob(chunks, {type: mimeType}), frameCount};
+}
+
+async function firstDecodedFrame(selected) {
+  for (let index = 0; index < selected.length; index += 1) {
+    try {
+      return {index, bitmap: await decode(selected[index])};
+    } catch (error) {
+      log(`[skip] ${selected[index].name}: ${decodeErrorMessage(error)}`);
+    }
+  }
+  throw new Error("No browser-decodable photos found. Use JPEG/PNG/WebP/BMP/GIF/AVIF here, or use the Linux desktop/local app for RAW files.");
 }
 
 async function decode(file) {
-  if (window.createImageBitmap) {
-    return createImageBitmap(file, {imageOrientation: "from-image"});
-  }
-  const url = URL.createObjectURL(file);
   try {
-    const image = await new Promise((resolve, reject) => {
-      const element = new Image();
-      element.onload = () => resolve(element);
-      element.onerror = reject;
-      element.src = url;
-    });
-    return image;
-  } finally {
-    URL.revokeObjectURL(url);
+    if (window.createImageBitmap) {
+      return await createImageBitmap(file, {imageOrientation: "from-image"});
+    }
+    const url = URL.createObjectURL(file);
+    try {
+      return await new Promise((resolve, reject) => {
+        const element = new Image();
+        element.onload = () => resolve(element);
+        element.onerror = reject;
+        element.src = url;
+      });
+    } finally {
+      URL.revokeObjectURL(url);
+    }
+  } catch (error) {
+    throw new Error(decodeErrorMessage(error));
   }
+}
+
+function decodeErrorMessage(error) {
+  const message = error?.message || String(error || "image could not be decoded");
+  if (message.toLowerCase().includes("could not be decoded")) {
+    return "image could not be decoded by this browser";
+  }
+  return message;
 }
 
 function fitCanvas(canvas, width, height, maxSide) {

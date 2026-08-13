@@ -14,6 +14,7 @@ The grouping step uses OpenCV feature matching and a RANSAC homography check. In
 - Includes a static GitHub Pages web app for browser-readable photo sets.
 - Groups images by likely camera angle.
 - Optionally uses EXIF capture time or file modified time to keep different sessions apart.
+- Ignores hidden dot files such as `.DS_Store` or `._IMG_0001.JPG`.
 - Lets the hosted web app browse every photo inside a group, jump by thumbnail, use arrow-key navigation, rename groups, add groups, undo manual edits, move photos between groups, create a new group, or remove photos from the working set.
 - Writes a JSON manifest with group scores and source paths.
 - Creates star trails with a lighten blend, which is the classic pixel-wise maximum stack.
@@ -182,7 +183,7 @@ The default Linux/desktop threshold is `0.42`. The Linux grouping engine now use
 
 ## RAW Files
 
-RAW support uses `rawpy` and covers common camera formats such as `.cr2`, `.cr3`, `.nef`, `.arw`, `.dng`, `.orf`, `.rw2`, `.raf`, `.pef`, `.srw`, and `.x3f`. The Debian/Pop!_OS desktop app, local browser UI, and CLI decode RAW files through the local Python engine. The GitHub Pages app runs fully in the browser, so it handles browser-readable formats and downloads PNG/JPEG images plus WebM/MP4 videos where the browser supports them.
+RAW support uses `rawpy` and covers common camera formats such as `.cr2`, `.cr3`, `.nef`, `.arw`, `.dng`, `.orf`, `.rw2`, `.raf`, `.pef`, `.srw`, and `.x3f`. The Debian/Pop!_OS desktop app, local browser UI, and CLI decode RAW files through the local Python engine. The GitHub Pages app runs fully in the browser, so it skips RAW files and hidden dot files, then continues with browser-readable JPEG/PNG/WebP/BMP/GIF/AVIF photos. Use the Linux desktop app or local browser UI for real RAW processing.
 
 ## GitHub Pages
 

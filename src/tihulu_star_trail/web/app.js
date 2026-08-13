@@ -7,13 +7,15 @@ const resultGrid = document.querySelector("#resultGrid");
 let pollTimer = null;
 
 function payload() {
+  const timeMetadata = document.querySelector("#timeMetadata");
+  const timeWindowInput = document.querySelector("#timeWindowHours") || document.querySelector("#timeWindowMinutes");
   return {
     action: document.querySelector("input[name='action']:checked").value,
     input: document.querySelector("#inputPath").value,
     output: document.querySelector("#outputPath").value,
     recursive: document.querySelector("#recursive").checked,
     timelapse: document.querySelector("#includeTimelapse").checked,
-    time_metadata: document.querySelector("#timeMetadata").checked,
+    time_metadata: Boolean(timeMetadata?.checked),
     threshold: Number(document.querySelector("#threshold").value),
     min_matches: Number(document.querySelector("#minMatches").value),
     min_frames: Number(document.querySelector("#minFrames").value),
@@ -21,7 +23,7 @@ function payload() {
     fps: Number(document.querySelector("#fps").value),
     video_max_side: Number(document.querySelector("#videoMaxSide").value),
     max_side: Number(document.querySelector("#maxSide").value),
-    time_window_hours: Number(document.querySelector("#timeWindowHours").value),
+    time_window_hours: Number(timeWindowInput?.value ?? 6),
     link_mode: document.querySelector("#linkMode").value,
     codec: "mp4v"
   };
