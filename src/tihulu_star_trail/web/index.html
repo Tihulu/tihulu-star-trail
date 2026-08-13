@@ -39,6 +39,7 @@
           <div class="toggle-line">
             <label><input id="recursive" type="checkbox" checked><span>Recursive scan</span></label>
             <label><input id="includeTimelapse" type="checkbox"><span>Group timelapses</span></label>
+            <label><input id="timeMetadata" type="checkbox"><span>Time metadata</span></label>
           </div>
 
           <div class="field-grid compact">
@@ -69,6 +70,10 @@
             <label class="field">
               <span>Feature Side</span>
               <input id="maxSide" type="number" min="200" step="50" value="1000">
+            </label>
+            <label class="field">
+              <span>Time Window Min</span>
+              <input id="timeWindowMinutes" type="number" min="1" step="30" value="360">
             </label>
             <label class="field">
               <span>Link Mode</span>

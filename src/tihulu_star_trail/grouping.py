@@ -13,6 +13,8 @@ from .defaults import (
     DEFAULT_MAX_SIDE,
     DEFAULT_MIN_MATCHES,
     DEFAULT_NFEATURES,
+    DEFAULT_TIME_METADATA,
+    DEFAULT_TIME_WINDOW_MINUTES,
 )
 from .images import read_capture_time, read_gray, sort_images_by_time
 
@@ -55,6 +57,8 @@ class AngleGroup:
     photos: list[AssignedPhoto]
     representative: ImageSignature
     last_signature: ImageSignature
+    representative_time: datetime | None = None
+    last_time: datetime | None = None
     match_scores: list[float] = field(default_factory=list)
 
     @property
@@ -177,6 +181,8 @@ def build_angle_groups(
     min_matches: int = DEFAULT_MIN_MATCHES,
     max_side: int = DEFAULT_MAX_SIDE,
     nfeatures: int = DEFAULT_NFEATURES,
+    time_metadata: bool = DEFAULT_TIME_METADATA,
+    time_window_minutes: float = DEFAULT_TIME_WINDOW_MINUTES,
     progress: Progress | None = None,
 ) -> list[AngleGroup]:
     ordered_paths = sort_images_by_time(paths)
@@ -189,9 +195,10 @@ def build_angle_groups(
 
         signature = extract_signature(path, max_side=max_side, nfeatures=nfeatures)
         captured_at = read_capture_time(path)
+        metadata_time = _metadata_time(path, captured_at)
 
         if not groups:
-            groups.append(_new_group(signature, captured_at))
+            groups.append(_new_group(signature, captured_at, metadata_time))
             continue
 
         best_group: AngleGroup | None = None
@@ -199,21 +206,47 @@ def build_angle_groups(
         best_label = "none"
 
         for group in groups:
-            representative_score = score_signatures(
-                group.representative,
-                signature,
-                min_matches=min_matches,
+            representative_allowed = _time_allows(
+                group.representative_time,
+                metadata_time,
+                time_metadata,
+                time_window_minutes,
             )
-            last_score = score_signatures(
-                group.last_signature,
-                signature,
-                min_matches=min_matches,
+            last_allowed = _time_allows(
+                group.last_time,
+                metadata_time,
+                time_metadata,
+                time_window_minutes,
+            )
+            if not representative_allowed and not last_allowed:
+                continue
+
+            representative_score = (
+                score_signatures(
+                    group.representative,
+                    signature,
+                    min_matches=min_matches,
+                )
+                if representative_allowed
+                else MatchScore(0.0, 0, 0, 0.0)
+            )
+            last_score = (
+                score_signatures(
+                    group.last_signature,
+                    signature,
+                    min_matches=min_matches,
+                )
+                if last_allowed
+                else MatchScore(0.0, 0, 0, 0.0)
             )
             candidate_score = representative_score
             candidate_label = "representative"
             if (
                 last_score.score > representative_score.score
-                and representative_score.score >= threshold * 0.72
+                and (
+                    representative_score.score >= threshold * 0.72
+                    or not representative_allowed
+                )
             ):
                 candidate_score = last_score
                 candidate_label = "latest"
@@ -223,7 +256,7 @@ def build_angle_groups(
                 best_label = candidate_label
 
         if best_group is None or best_score.score < threshold:
-            groups.append(_new_group(signature, captured_at))
+            groups.append(_new_group(signature, captured_at, metadata_time))
             continue
 
         best_group.photos.append(
@@ -236,13 +269,18 @@ def build_angle_groups(
         )
         best_group.match_scores.append(best_score.score)
         best_group.last_signature = signature
+        best_group.last_time = metadata_time
 
     for group_index, group in enumerate(groups, start=1):
         group.index = group_index
     return groups
 
 
-def _new_group(signature: ImageSignature, captured_at: datetime | None) -> AngleGroup:
+def _new_group(
+    signature: ImageSignature,
+    captured_at: datetime | None,
+    metadata_time: datetime | None,
+) -> AngleGroup:
     return AngleGroup(
         photos=[
             AssignedPhoto(
@@ -254,7 +292,30 @@ def _new_group(signature: ImageSignature, captured_at: datetime | None) -> Angle
         ],
         representative=signature,
         last_signature=signature,
+        representative_time=metadata_time,
+        last_time=metadata_time,
     )
+
+
+def _metadata_time(path: Path, captured_at: datetime | None) -> datetime | None:
+    if captured_at is not None:
+        return captured_at
+    try:
+        return datetime.fromtimestamp(path.stat().st_mtime)
+    except OSError:
+        return None
+
+
+def _time_allows(
+    first: datetime | None,
+    second: datetime | None,
+    enabled: bool,
+    window_minutes: float,
+) -> bool:
+    if not enabled or first is None or second is None:
+        return True
+    window_seconds = max(float(window_minutes), 0.0) * 60.0
+    return abs((first - second).total_seconds()) <= window_seconds
 
 
 def _mutual_ratio_matches(

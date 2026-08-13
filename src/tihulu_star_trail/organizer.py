@@ -6,6 +6,12 @@ import shutil
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
+from .defaults import (
+    DEFAULT_GROUPING_THRESHOLD,
+    DEFAULT_TIME_METADATA,
+    DEFAULT_TIME_WINDOW_MINUTES,
+)
+
 if TYPE_CHECKING:
     from .grouping import AngleGroup
 
@@ -16,7 +22,9 @@ def materialize_groups(
     groups: list[AngleGroup],
     output_dir: Path,
     link_mode: LinkMode = "symlink",
-    threshold: float = 0.32,
+    threshold: float = DEFAULT_GROUPING_THRESHOLD,
+    time_metadata: bool = DEFAULT_TIME_METADATA,
+    time_window_minutes: float = DEFAULT_TIME_WINDOW_MINUTES,
 ) -> Path:
     output_dir = Path(output_dir)
     groups_dir = output_dir / "groups"
@@ -25,6 +33,8 @@ def materialize_groups(
     manifest = {
         "version": 1,
         "threshold": threshold,
+        "time_metadata": time_metadata,
+        "time_window_minutes": time_window_minutes,
         "link_mode": link_mode,
         "group_count": len(groups),
         "groups": [],

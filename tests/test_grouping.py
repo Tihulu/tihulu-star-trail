@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 import cv2
@@ -33,6 +34,34 @@ def test_grouping_keeps_same_viewpoint_and_splits_different_scenes(tmp_path: Pat
         ["001_same.png", "002_same_brighter.png"],
         ["003_different_color_angle.png"],
     ]
+
+
+def test_time_metadata_option_splits_matching_photos_from_different_sessions(
+    tmp_path: Path,
+) -> None:
+    first = tmp_path / "001_session_one.png"
+    second = tmp_path / "002_session_two.png"
+    scene = _same_viewpoint_scene()
+    write_bgr(first, scene)
+    write_bgr(second, scene)
+    base_time = 1_704_067_200.0
+    os.utime(first, (base_time, base_time))
+    os.utime(second, (base_time + 24 * 60 * 60, base_time + 24 * 60 * 60))
+
+    visual_groups = build_angle_groups(
+        [first, second],
+        max_side=320,
+        time_metadata=False,
+    )
+    timed_groups = build_angle_groups(
+        [first, second],
+        max_side=320,
+        time_metadata=True,
+        time_window_minutes=60,
+    )
+
+    assert [len(group.photos) for group in visual_groups] == [2]
+    assert [len(group.photos) for group in timed_groups] == [1, 1]
 
 
 def _same_viewpoint_scene() -> np.ndarray:

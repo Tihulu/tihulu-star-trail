@@ -9,6 +9,8 @@ from .defaults import (
     DEFAULT_MAX_SIDE,
     DEFAULT_MIN_MATCHES,
     DEFAULT_NFEATURES,
+    DEFAULT_TIME_METADATA,
+    DEFAULT_TIME_WINDOW_MINUTES,
 )
 from .images import list_images
 from .organizer import materialize_groups
@@ -159,6 +161,18 @@ def add_grouping_options(parser: argparse.ArgumentParser) -> None:
         help="maximum ORB features to detect per image",
     )
     parser.add_argument(
+        "--time-metadata",
+        action=argparse.BooleanOptionalAction,
+        default=DEFAULT_TIME_METADATA,
+        help="also require nearby EXIF or file metadata times when grouping",
+    )
+    parser.add_argument(
+        "--time-window-minutes",
+        type=float,
+        default=DEFAULT_TIME_WINDOW_MINUTES,
+        help="maximum metadata time gap allowed for same-group photos",
+    )
+    parser.add_argument(
         "--recursive",
         action=argparse.BooleanOptionalAction,
         default=True,
@@ -236,6 +250,8 @@ def run_command(args: argparse.Namespace) -> int:
         min_matches=args.min_matches,
         max_side=args.max_side,
         nfeatures=args.nfeatures,
+        time_metadata=args.time_metadata,
+        time_window_minutes=args.time_window_minutes,
         progress=progress,
     )
     manifest_path = materialize_groups(
@@ -243,6 +259,8 @@ def run_command(args: argparse.Namespace) -> int:
         args.output,
         link_mode=args.link_mode,
         threshold=args.threshold,
+        time_metadata=args.time_metadata,
+        time_window_minutes=args.time_window_minutes,
     )
     rendered = render_group_trails(
         groups,
@@ -281,6 +299,8 @@ def group_command(args: argparse.Namespace) -> int:
         min_matches=args.min_matches,
         max_side=args.max_side,
         nfeatures=args.nfeatures,
+        time_metadata=args.time_metadata,
+        time_window_minutes=args.time_window_minutes,
         progress=progress,
     )
     manifest_path = materialize_groups(
@@ -288,6 +308,8 @@ def group_command(args: argparse.Namespace) -> int:
         args.output,
         link_mode=args.link_mode,
         threshold=args.threshold,
+        time_metadata=args.time_metadata,
+        time_window_minutes=args.time_window_minutes,
     )
     print(f"Created {len(groups)} group(s) and {manifest_path}", file=sys.stderr)
     return 0

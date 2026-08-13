@@ -8,7 +8,13 @@ from importlib import resources
 from pathlib import Path
 from typing import Any, Callable
 
-from .defaults import DEFAULT_GROUPING_THRESHOLD, DEFAULT_MAX_SIDE, DEFAULT_MIN_MATCHES
+from .defaults import (
+    DEFAULT_GROUPING_THRESHOLD,
+    DEFAULT_MAX_SIDE,
+    DEFAULT_MIN_MATCHES,
+    DEFAULT_TIME_METADATA,
+    DEFAULT_TIME_WINDOW_MINUTES,
+)
 from .engine import execute_action, scan_images
 
 TK_HINT = "Native desktop app requires Tk. On Debian/Pop!_OS, run: sudo apt install python3-tk tk-dev"
@@ -78,6 +84,7 @@ class TihuluDesktopApp:
         self.output_path = tk.StringVar(value=str(Path.home() / "tihulu-output"))
         self.recursive = tk.BooleanVar(value=True)
         self.include_timelapse = tk.BooleanVar(value=False)
+        self.time_metadata = tk.BooleanVar(value=DEFAULT_TIME_METADATA)
         self.threshold = tk.StringVar(value=str(DEFAULT_GROUPING_THRESHOLD))
         self.min_matches = tk.StringVar(value=str(DEFAULT_MIN_MATCHES))
         self.min_frames = tk.StringVar(value="2")
@@ -85,6 +92,7 @@ class TihuluDesktopApp:
         self.fps = tk.StringVar(value="24")
         self.video_max_side = tk.StringVar(value="1920")
         self.max_side = tk.StringVar(value=str(DEFAULT_MAX_SIDE))
+        self.time_window_minutes = tk.StringVar(value=str(DEFAULT_TIME_WINDOW_MINUTES))
         self.link_mode = tk.StringVar(value="symlink")
         self.state = tk.StringVar(value="READY")
         self.result = tk.StringVar(value="No result yet")
@@ -212,9 +220,11 @@ class TihuluDesktopApp:
         frame.grid(row=row, column=0, sticky="ew", pady=(0, 14))
         recursive = self.ttk.Checkbutton(frame, text="Recursive scan", variable=self.recursive)
         timelapse = self.ttk.Checkbutton(frame, text="Group timelapses", variable=self.include_timelapse)
+        time_metadata = self.ttk.Checkbutton(frame, text="Use time metadata", variable=self.time_metadata)
         recursive.grid(row=0, column=0, sticky="w", padx=(0, 16))
-        timelapse.grid(row=0, column=1, sticky="w")
-        self.controls.extend([recursive, timelapse])
+        timelapse.grid(row=0, column=1, sticky="w", padx=(0, 16))
+        time_metadata.grid(row=0, column=2, sticky="w")
+        self.controls.extend([recursive, timelapse, time_metadata])
 
     def _settings_grid(self, parent: Any, row: int) -> None:
         frame = self.ttk.Frame(parent, style="Panel.TFrame")
@@ -230,6 +240,7 @@ class TihuluDesktopApp:
             ("FPS", self.fps, 1, 120, 1),
             ("Video Max Side", self.video_max_side, 0, 8192, 64),
             ("Feature Side", self.max_side, 200, 4000, 50),
+            ("Time Window Min", self.time_window_minutes, 1, 43200, 30),
         ]
         for index, (label, variable, from_, to, increment) in enumerate(settings):
             r, c = divmod(index, 3)
@@ -241,7 +252,8 @@ class TihuluDesktopApp:
             self.controls.append(spin)
 
         cell = self.ttk.Frame(frame, style="Panel.TFrame")
-        cell.grid(row=4, column=1, sticky="ew", padx=(0, 10), pady=(0, 10))
+        link_row = ((len(settings) + 2) // 3) * 2
+        cell.grid(row=link_row, column=0, sticky="ew", padx=(0, 10), pady=(0, 10))
         self.ttk.Label(cell, text="Link Mode").grid(row=0, column=0, sticky="w")
         combo = self.ttk.Combobox(
             cell,
@@ -351,6 +363,8 @@ class TihuluDesktopApp:
             "fps": float(self.fps.get()),
             "video_max_side": int(float(self.video_max_side.get())),
             "max_side": int(float(self.max_side.get())),
+            "time_metadata": self.time_metadata.get(),
+            "time_window_minutes": float(self.time_window_minutes.get()),
             "link_mode": self.link_mode.get(),
             "codec": "mp4v",
         }

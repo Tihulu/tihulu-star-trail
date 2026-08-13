@@ -3,6 +3,8 @@ const dropZone = document.querySelector("#dropZone");
 const analyzeButton = document.querySelector("#analyzeButton");
 const trailButton = document.querySelector("#trailButton");
 const timelapseButton = document.querySelector("#timelapseButton");
+const timeMetadataToggle = document.querySelector("#timeMetadata");
+const timeWindowInput = document.querySelector("#timeWindowMinutes");
 const logOutput = document.querySelector("#logOutput");
 const groupsPanel = document.querySelector("#groupsPanel");
 const groupTitle = document.querySelector("#groupTitle");
@@ -50,6 +52,7 @@ function settings() {
   const imageQuality = clamp(Number(document.querySelector("#imageQuality").value), 1, 100);
   const videoFormat = document.querySelector("#videoFormat").value;
   const videoQualityMbps = clamp(Number(document.querySelector("#videoQuality").value), 0.5, 50);
+  const timeWindowMinutes = clamp(Number(timeWindowInput.value), 1, 43200);
   return {
     threshold: Number(document.querySelector("#threshold").value),
     thumbSide: Number(document.querySelector("#thumbSide").value),
@@ -63,7 +66,10 @@ function settings() {
     videoExtension: videoFormat === "video/mp4" ? "mp4" : "webm",
     videoLabel: videoFormat === "video/mp4" ? "MP4" : "WebM",
     videoQualityMbps,
-    videoBitsPerSecond: Math.round(videoQualityMbps * 1000000)
+    videoBitsPerSecond: Math.round(videoQualityMbps * 1000000),
+    useTimeMetadata: timeMetadataToggle.checked,
+    timeWindowMinutes,
+    timeWindowMs: timeWindowMinutes * 60000
   };
 }
 
@@ -243,9 +249,12 @@ document.addEventListener("keydown", (event) => {
 });
 
 async function groupPhotos(inputFiles, options) {
+  const groupedFiles = options.useTimeMetadata
+    ? Array.from(inputFiles).sort(compareFileTime)
+    : inputFiles;
   const signatures = [];
-  for (const [index, file] of inputFiles.entries()) {
-    log(`[${index + 1}/${inputFiles.length}] analyzing ${file.name}`);
+  for (const [index, file] of groupedFiles.entries()) {
+    log(`[${index + 1}/${groupedFiles.length}] analyzing ${file.name}`);
     signatures.push({file, signature: await imageSignature(file, options.thumbSide)});
   }
 
@@ -254,9 +263,15 @@ async function groupPhotos(inputFiles, options) {
     let best = null;
     let bestScore = -1;
     for (const group of detected) {
-      const representativeScore = similarity(item.signature, group.representative);
-      const latestScore = similarity(item.signature, group.lastSignature);
-      const score = latestScore > representativeScore && representativeScore >= options.threshold * 0.72
+      const representativeAllowed = timeCompatible(item.signature, group.representative, options);
+      const latestAllowed = timeCompatible(item.signature, group.lastSignature, options);
+      if (!representativeAllowed && !latestAllowed) continue;
+
+      const representativeScore = representativeAllowed ? similarity(item.signature, group.representative) : 0;
+      const latestScore = latestAllowed ? similarity(item.signature, group.lastSignature) : 0;
+      const score = latestScore > representativeScore && (
+        representativeScore >= options.threshold * 0.72 || !representativeAllowed
+      )
         ? latestScore
         : representativeScore;
       if (score > bestScore) {
@@ -365,8 +380,29 @@ async function imageSignature(file, side) {
     ],
     meanLuma: meanLuma / 255,
     contrast: contrast / 255,
-    aspect
+    aspect,
+    capturedAt: fileTime(file)
   };
+}
+
+function compareFileTime(first, second) {
+  const firstTime = fileTime(first) ?? 0;
+  const secondTime = fileTime(second) ?? 0;
+  return firstTime - secondTime || first.name.localeCompare(second.name);
+}
+
+function fileTime(file) {
+  return Number.isFinite(file.lastModified) && file.lastModified > 0
+    ? file.lastModified
+    : null;
+}
+
+function timeCompatible(first, second, options) {
+  if (!options.useTimeMetadata) return true;
+  const firstTime = first?.capturedAt;
+  const secondTime = second?.capturedAt;
+  if (!Number.isFinite(firstTime) || !Number.isFinite(secondTime)) return true;
+  return Math.abs(firstTime - secondTime) <= options.timeWindowMs;
 }
 
 function similarity(first, second) {

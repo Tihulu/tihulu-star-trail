@@ -13,6 +13,7 @@ The grouping step uses OpenCV feature matching and a RANSAC homography check. In
 - Keeps the local browser interface available with `tihulu ui`.
 - Includes a static GitHub Pages web app for browser-readable photo sets.
 - Groups images by likely camera angle.
+- Optionally uses EXIF capture time or file modified time to keep different sessions apart.
 - Lets the hosted web app browse every photo inside a group, jump by thumbnail, use arrow-key navigation, rename groups, add groups, undo manual edits, move photos between groups, create a new group, or remove photos from the working set.
 - Writes a JSON manifest with group scores and source paths.
 - Creates star trails with a lighten blend, which is the classic pixel-wise maximum stack.
@@ -171,7 +172,13 @@ If photos from the same angle are being split into too many groups, make it more
 tihulu run ./photos ./output --threshold 0.35
 ```
 
-The default Linux/desktop threshold is `0.42`. The Linux grouping engine now uses mutual ORB feature matches, RANSAC homography inliers, inlier spread across the frame, and homography sanity checks before accepting a same-angle match. The GitHub Pages browser app uses a separate browser-only scorer with a default threshold of `0.72`; it compares luminance structure, edge layout, color balance, contrast, and aspect ratio. In both apps, higher threshold values are stricter. Most real night-sky sets may still need a little tuning because foreground detail, moonlight, clouds, lens distortion, and exposure settings all affect matching.
+To also keep different shooting sessions apart by metadata time, enable the optional time guard:
+
+```bash
+tihulu run ./photos ./output --time-metadata --time-window-minutes 360
+```
+
+The default Linux/desktop threshold is `0.42`. The Linux grouping engine now uses mutual ORB feature matches, RANSAC homography inliers, inlier spread across the frame, and homography sanity checks before accepting a same-angle match. The optional time metadata guard uses EXIF capture time when available, then falls back to the file modified time. The GitHub Pages browser app uses a separate browser-only scorer with a default threshold of `0.72`; it compares luminance structure, edge layout, color balance, contrast, and aspect ratio. Its optional time metadata guard uses the browser-provided file modified time. In both apps, higher threshold values are stricter. Most real night-sky sets may still need a little tuning because foreground detail, moonlight, clouds, lens distortion, and exposure settings all affect matching.
 
 ## RAW Files
 
@@ -179,7 +186,7 @@ RAW support uses `rawpy` and covers common camera formats such as `.cr2`, `.cr3`
 
 ## GitHub Pages
 
-The static web app lives in `docs/` and is deployed by `.github/workflows/pages.yml` using GitHub Actions. The hosted app is configured for `https://tihulu.github.io/tihulu-star-trail/`. Browser exports include PNG/JPEG image quality controls plus WebM/MP4 video type and bitrate controls. The web app also includes stricter browser-side grouping plus a manual group editor with a scrollable thumbnail browser, arrow-key photo navigation, undo, group renaming, manual group creation, moving photos between detected groups, and removing photos from the current working set. MP4 export depends on browser MediaRecorder support; WebM is the safest browser fallback.
+The static web app lives in `docs/` and is deployed by `.github/workflows/pages.yml` using GitHub Actions. The hosted app is configured for `https://tihulu.github.io/tihulu-star-trail/`. Browser exports include PNG/JPEG image quality controls plus WebM/MP4 video type and bitrate controls. The web app also includes stricter browser-side grouping, optional file-time metadata grouping, and a manual group editor with a scrollable thumbnail browser, arrow-key photo navigation, undo, group renaming, manual group creation, moving photos between detected groups, and removing photos from the current working set. MP4 export depends on browser MediaRecorder support; WebM is the safest browser fallback.
 
 ## Development
 

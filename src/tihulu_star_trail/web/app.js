@@ -13,6 +13,7 @@ function payload() {
     output: document.querySelector("#outputPath").value,
     recursive: document.querySelector("#recursive").checked,
     timelapse: document.querySelector("#includeTimelapse").checked,
+    time_metadata: document.querySelector("#timeMetadata").checked,
     threshold: Number(document.querySelector("#threshold").value),
     min_matches: Number(document.querySelector("#minMatches").value),
     min_frames: Number(document.querySelector("#minFrames").value),
@@ -20,6 +21,7 @@ function payload() {
     fps: Number(document.querySelector("#fps").value),
     video_max_side: Number(document.querySelector("#videoMaxSide").value),
     max_side: Number(document.querySelector("#maxSide").value),
+    time_window_minutes: Number(document.querySelector("#timeWindowMinutes").value),
     link_mode: document.querySelector("#linkMode").value,
     codec: "mp4v"
   };

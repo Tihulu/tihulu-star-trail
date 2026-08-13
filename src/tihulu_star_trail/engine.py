@@ -8,6 +8,8 @@ from .defaults import (
     DEFAULT_MAX_SIDE,
     DEFAULT_MIN_MATCHES,
     DEFAULT_NFEATURES,
+    DEFAULT_TIME_METADATA,
+    DEFAULT_TIME_WINDOW_MINUTES,
 )
 from .grouping import build_angle_groups
 from .images import list_images
@@ -47,6 +49,10 @@ def execute_action(payload: dict[str, Any], progress: Progress | None = None) ->
     min_matches = int(payload.get("min_matches", DEFAULT_MIN_MATCHES))
     max_side = int(payload.get("max_side", DEFAULT_MAX_SIDE))
     nfeatures = int(payload.get("nfeatures", DEFAULT_NFEATURES))
+    time_metadata = bool(payload.get("time_metadata", DEFAULT_TIME_METADATA))
+    time_window_minutes = float(
+        payload.get("time_window_minutes", DEFAULT_TIME_WINDOW_MINUTES)
+    )
     fps = float(payload.get("fps", 24.0))
     video_max_side = _optional_max_side(int(payload.get("video_max_side", 1920)))
     codec = str(payload.get("codec", "mp4v"))
@@ -58,12 +64,18 @@ def execute_action(payload: dict[str, Any], progress: Progress | None = None) ->
             raise ValueError(f"No supported images found in {input_path}")
         if progress is not None:
             progress(f"Loaded {len(paths)} image(s)")
+            if time_metadata:
+                progress(
+                    f"Time metadata guard enabled ({time_window_minutes:g} minute window)"
+                )
         groups = build_angle_groups(
             paths,
             threshold=threshold,
             min_matches=min_matches,
             max_side=max_side,
             nfeatures=nfeatures,
+            time_metadata=time_metadata,
+            time_window_minutes=time_window_minutes,
             progress=progress,
         )
         manifest = materialize_groups(
@@ -71,6 +83,8 @@ def execute_action(payload: dict[str, Any], progress: Progress | None = None) ->
             output_path,
             link_mode=link_mode,
             threshold=threshold,
+            time_metadata=time_metadata,
+            time_window_minutes=time_window_minutes,
         )
         result: dict[str, Any] = {
             "groups": len(groups),
