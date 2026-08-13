@@ -106,11 +106,18 @@ jobs:
           appimage=$(find release-dist -name '*.AppImage' -print -quit)
           TIHULU_FFMPEG_CHECK=1 TIHULU_REQUIRE_BUNDLED_FFMPEG=1 "$appimage"
 
+      - name: Smoke-test FUSE-free launcher
+        run: |
+          launcher=$(find release-dist -name '*-no-fuse.sh' -print -quit)
+          TIHULU_DESKTOP_CHECK=1 "$launcher"
+
       - name: Upload AppImage artifact
         uses: actions/upload-artifact@v7
         with:
           name: release-linux-x86_64
-          path: release-dist/*.AppImage
+          path: |
+            release-dist/*.AppImage
+            release-dist/*-no-fuse.sh
           if-no-files-found: error
 
   publish:

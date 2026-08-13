@@ -30,6 +30,7 @@ trap 'rm -rf "$TEMP_ROOT"' EXIT HUP INT TERM
 APPDIR="$TEMP_ROOT/TihuluStarTrail.AppDir"
 APP_BINARY_DIR="$APPDIR/usr/bin"
 APPIMAGE_FILE="$OUTPUT_DIR/Tihulu-Star-Trail-$VERSION-linux-$RELEASE_ARCH.AppImage"
+NO_FUSE_LAUNCHER="$OUTPUT_DIR/Tihulu-Star-Trail-$VERSION-linux-$RELEASE_ARCH-no-fuse.sh"
 ICON_SOURCE="$PROJECT_DIR/src/tihulu_star_trail/assets/tihulu-star-trail.png"
 
 mkdir -p \
@@ -79,5 +80,23 @@ ARCH="$RELEASE_ARCH" VERSION="$VERSION" \
   "$APPIMAGETOOL_BIN" --appimage-extract-and-run "$APPDIR" "$APPIMAGE_FILE"
 chmod +x "$APPIMAGE_FILE"
 
+cat > "$NO_FUSE_LAUNCHER" <<'EOF'
+#!/bin/sh
+# Run the neighbouring AppImage by extracting it instead of mounting it with FUSE.
+set -eu
+
+LAUNCHER_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+APPIMAGE=$(find "$LAUNCHER_DIR" -maxdepth 1 -type f -name 'Tihulu-Star-Trail-*-linux-*.AppImage' -print -quit)
+
+if [ -z "$APPIMAGE" ]; then
+  echo "Tihulu Star Trail AppImage was not found next to this launcher." >&2
+  exit 1
+fi
+
+APPIMAGE_EXTRACT_AND_RUN=1 exec "$APPIMAGE" "$@"
+EOF
+chmod +x "$NO_FUSE_LAUNCHER"
+
 echo "Created $APPIMAGE_FILE"
+echo "Created $NO_FUSE_LAUNCHER"
 sha256sum "$APPIMAGE_FILE"
