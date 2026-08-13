@@ -3,6 +3,7 @@ from __future__ import annotations
 import queue
 import shutil
 import subprocess
+import sys
 import threading
 from importlib import resources
 from pathlib import Path
@@ -19,7 +20,11 @@ from .desktop_groups import GroupWorkspace
 from .engine import analyze_groups, execute_action, export_groups, scan_images
 from .images import read_bgr
 
-TK_HINT = "Native desktop app requires Tk. On Debian/Pop!_OS, run: sudo apt install python3-tk tk-dev"
+TK_HINT = (
+    "Native desktop app requires Tk. On macOS with Homebrew, run: "
+    "brew install python@3.12 python-tk@3.12. "
+    "On Debian/Pop!_OS, run: sudo apt install python3-tk tk-dev"
+)
 
 BG = "#05070d"
 PANEL = "#0d121f"
@@ -587,9 +592,9 @@ class TihuluDesktopApp:
         if not output:
             self._append_log("Output path is empty.")
             return
-        opener = shutil.which("xdg-open")
+        opener = shutil.which("open") if sys.platform == "darwin" else shutil.which("xdg-open")
         if opener is None:
-            self._append_log("xdg-open is not installed.")
+            self._append_log("Could not find the system folder opener.")
             return
         try:
             subprocess.Popen([opener, output])
