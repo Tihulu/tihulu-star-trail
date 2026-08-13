@@ -17,7 +17,7 @@ Tihulu Star Trail provides native desktop installation for macOS and Debian-base
 - macOS 11 or newer.
 - An internet connection during the first installation.
 
-The release DMG contains a standalone application and does not require Python or Homebrew. The command-line installer uses [Homebrew](https://brew.sh/) to install Python 3.12, Tk, and FFmpeg.
+The release DMG contains a standalone application and does not require Python or Homebrew. The one-line command installs [Homebrew](https://brew.sh/) when it is missing, then uses it to install Python 3.12, Tk, FFmpeg, Git when needed, and all Python dependencies.
 
 ### DMG Installation
 
@@ -33,7 +33,7 @@ The DMG application is standalone. The Homebrew-based method below remains usefu
 
 ### One-Line Installation
 
-Install [Homebrew](https://brew.sh/), then open Terminal and run:
+Open Terminal and run the command below. It installs Homebrew and every required dependency when they are missing:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/Tihulu/tihulu-star-trail/main/macos/install.sh | sh
@@ -84,7 +84,7 @@ If `tihulu` is not found without its full path, add `~/.local/bin` to your shell
 
 ### macOS Troubleshooting
 
-- If `brew` is not found, install Homebrew and rerun the installer.
+- If automatic Homebrew installation is interrupted, rerun the same one-line installer; it detects and continues an existing Homebrew setup.
 - If the app does not open, inspect `~/Library/Logs/Tihulu Star Trail.log`.
 - If Tk is missing, run `brew install python@3.12 python-tk@3.12` and rerun `./macos/install.sh`.
 - If video export is unavailable, run `brew install ffmpeg`.

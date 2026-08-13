@@ -75,7 +75,17 @@ hdiutil create \
   -format UDZO \
   -ov \
   "$DMG_FILE" >/dev/null
-hdiutil verify "$DMG_FILE" >/dev/null
+sync
+verify_attempt=1
+while ! hdiutil verify "$DMG_FILE" >/dev/null; do
+  if [ "$verify_attempt" -ge 3 ]; then
+    echo "Could not verify $DMG_FILE after $verify_attempt attempts." >&2
+    exit 1
+  fi
+  echo "DMG verification was temporarily unavailable; retrying..." >&2
+  verify_attempt=$((verify_attempt + 1))
+  sleep 5
+done
 
 echo "Created $DMG_FILE"
 shasum -a 256 "$DMG_FILE"

@@ -46,13 +46,13 @@ Download the DMG for your Mac from the [latest GitHub Release](https://github.co
 
 Open the DMG and drag **Tihulu Star Trail** into the Applications shortcut. Release builds are ad-hoc signed but not Apple-notarized, so the first launch may require Control-clicking the app and choosing **Open**.
 
-The command-line installer remains available when you prefer a Homebrew-managed installation. Homebrew is required for this method:
+The command-line installer remains available when you prefer a managed installation. The same one-line command installs Homebrew when it is missing, then installs Python 3.12, Tk, FFmpeg, Git when needed, and every Python dependency:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/Tihulu/tihulu-star-trail/main/macos/install.sh | sh
 ```
 
-The installer uses Homebrew `python@3.12`, `python-tk@3.12`, and `ffmpeg`, creates an isolated runtime under `~/Library/Application Support/Tihulu Star Trail`, installs the CLI at `~/.local/bin/tihulu`, and builds a normal macOS application bundle. No Terminal window is shown when the app is launched from Applications, and the installed app keeps working if the original cloned repository is moved or deleted.
+The installer uses the official Homebrew installer when necessary, installs Homebrew `python@3.12`, `python-tk@3.12`, and `ffmpeg`, creates an isolated runtime under `~/Library/Application Support/Tihulu Star Trail`, installs the CLI at `~/.local/bin/tihulu`, and builds a normal macOS application bundle. No Terminal window is shown when the app is launched from Applications, and the installed app keeps working if the original cloned repository is moved or deleted.
 
 From a cloned repository, install or refresh the macOS app with:
 
