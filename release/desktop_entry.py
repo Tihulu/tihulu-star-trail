@@ -4,12 +4,19 @@ import os
 import sys
 
 from tihulu_star_trail.desktop import check_desktop_dependencies, launch_desktop
+from tihulu_star_trail.stacker import check_video_dependencies
 
 
 def main() -> int:
     if os.environ.get("TIHULU_DESKTOP_CHECK") == "1":
         check_desktop_dependencies()
         print("Tihulu packaged desktop dependencies are available.")
+        return 0
+    if os.environ.get("TIHULU_FFMPEG_CHECK") == "1":
+        executable = check_video_dependencies(
+            require_bundled=os.environ.get("TIHULU_REQUIRE_BUNDLED_FFMPEG") == "1"
+        )
+        print(f"Tihulu packaged FFmpeg is available: {executable}")
         return 0
 
     try:

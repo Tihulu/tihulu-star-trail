@@ -20,8 +20,8 @@ case "$(uname -m)" in
     ;;
 esac
 
-if ! "$PYTHON_BIN" -c 'import PyInstaller' >/dev/null 2>&1; then
-  echo "PyInstaller is required. Run: python -m pip install pyinstaller" >&2
+if ! "$PYTHON_BIN" -c 'import PyInstaller, imageio_ffmpeg' >/dev/null 2>&1; then
+  echo "PyInstaller and imageio-ffmpeg are required. Run: python -m pip install '.[release]'" >&2
   exit 1
 fi
 
@@ -46,6 +46,7 @@ sips -s format icns "$PROJECT_DIR/src/tihulu_star_trail/assets/tihulu-star-trail
   --osx-bundle-identifier com.tihulu.startrail \
   --collect-data tihulu_star_trail \
   --collect-all rawpy \
+  --collect-all imageio_ffmpeg \
   --hidden-import PIL.ImageTk \
   --hidden-import tkinter \
   --distpath "$TEMP_ROOT/dist" \

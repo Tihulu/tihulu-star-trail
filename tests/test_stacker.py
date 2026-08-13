@@ -1,9 +1,26 @@
 from pathlib import Path
 
 import numpy as np
+import pytest
 
 from tihulu_star_trail.images import read_bgr, write_bgr
+from tihulu_star_trail import stacker
 from tihulu_star_trail.stacker import render_timelapse, stack_lighten
+
+
+def test_ffmpeg_executable_prefers_packaged_binary(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(stacker, "bundled_ffmpeg_executable", lambda: "/app/ffmpeg")
+    monkeypatch.setattr(stacker.shutil, "which", lambda _: "/usr/local/bin/ffmpeg")
+
+    assert stacker.ffmpeg_executable() == "/app/ffmpeg"
+
+
+def test_ffmpeg_executable_falls_back_to_system_binary(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(stacker, "bundled_ffmpeg_executable", lambda: None)
+    monkeypatch.setattr(stacker.shutil, "which", lambda _: "/usr/local/bin/ffmpeg")
+
+    assert stacker.ffmpeg_executable() == "/usr/local/bin/ffmpeg"
+    assert stacker.ffmpeg_executable(require_bundled=True) is None
 
 
 def test_stack_lighten_uses_pixelwise_maximum(tmp_path: Path) -> None:

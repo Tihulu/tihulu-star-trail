@@ -44,7 +44,7 @@ Download the DMG for your Mac from the [latest GitHub Release](https://github.co
 - Apple Silicon (`M1`, `M2`, `M3`, `M4`, or newer): download the `arm64.dmg` file.
 - Intel Mac: download the `x86_64.dmg` file.
 
-Open the DMG and drag **Tihulu Star Trail** into the Applications shortcut. Release builds are ad-hoc signed but not Apple-notarized, so the first launch may require Control-clicking the app and choosing **Open**.
+Open the DMG and drag **Tihulu Star Trail** into the Applications shortcut. The DMG includes Python, RAW support, and a native FFmpeg binary, so MP4 and timelapse exports work without Homebrew, Python, or a separate FFmpeg installation. Release builds are ad-hoc signed but not Apple-notarized, so the first launch may require Control-clicking the app and choosing **Open**.
 
 The command-line installer remains available when you prefer a managed installation. The same one-line command installs Homebrew when it is missing, then installs Python 3.12, Tk, FFmpeg, Git when needed, and every Python dependency:
 
@@ -79,7 +79,7 @@ chmod +x Tihulu-Star-Trail-*-linux-x86_64.AppImage
 ./Tihulu-Star-Trail-*-linux-x86_64.AppImage
 ```
 
-The AppImage is self-contained and targets x86_64 Debian 12, Ubuntu 22.04, Pop!_OS 22.04, and newer compatible distributions. Use the installer below when you want a managed virtual environment, command-line launcher, and application-menu entry.
+The AppImage is self-contained and targets x86_64 Debian 12, Ubuntu 22.04, Pop!_OS 22.04, and newer compatible distributions. It includes Python, RAW support, and a native FFmpeg binary, so MP4 and timelapse exports work without installing Python or FFmpeg. Use the installer below when you want a managed virtual environment, command-line launcher, and application-menu entry.
 
 One-line install:
 
@@ -89,7 +89,7 @@ curl -fsSL https://raw.githubusercontent.com/Tihulu/tihulu-star-trail/main/scrip
 
 The installer adds a launcher at `~/.local/bin/tihulu` and a Pop!_OS/GNOME application entry named **Tihulu Star Trail**. That launcher opens the native Linux desktop app. If `~/.local/bin` is not already on your `PATH`, run the command with the full path or add it to your shell profile.
 
-If `pyenv` is installed in your `PATH` or at `~/.pyenv`, the installer uses Python `3.12.8` from pyenv and installs all Python dependencies with pip: `opencv-python-headless`, `numpy`, `Pillow`, and `rawpy`. The installer also installs Debian desktop packages when apt is available: `python3-tk`, `tk-dev`, `xdg-utils`, and `ffmpeg`. FFmpeg applies the requested video bitrate when available. If `pyenv` is not installed, it uses native Debian packages through apt where possible and installs `rawpy` with pip. Pyenv itself may need system build dependencies the first time it compiles Python. The installer verifies that `cv2`, `numpy`, `PIL`, `rawpy`, and `tkinter` import successfully before it finishes.
+If `pyenv` is installed in your `PATH` or at `~/.pyenv`, the installer uses Python `3.12.8` from pyenv and installs all Python dependencies with pip: `opencv-python-headless`, `numpy`, `Pillow`, `rawpy`, and an embedded FFmpeg binary. The installer also installs Debian desktop packages when apt is available: `python3-tk`, `tk-dev`, `xdg-utils`, and `ffmpeg`. If `pyenv` is not installed, it uses native Debian packages through apt where possible and installs `rawpy` plus the embedded FFmpeg binary with pip. MP4 and timelapse exports therefore work even if system FFmpeg is later removed. The installer verifies that `cv2`, `numpy`, `PIL`, `rawpy`, `imageio-ffmpeg`, and `tkinter` import successfully before it finishes.
 
 From inside a cloned repository, you can run the same installer locally:
 

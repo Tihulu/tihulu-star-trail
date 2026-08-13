@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "tihulu-star-trail"
-version = "0.1.0"
+version = "0.1.1"
 description = "Group night-sky photos by camera angle and build star trail images on macOS and Linux."
 readme = "README.md"
 requires-python = ">=3.9"
@@ -37,6 +37,13 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
   "pytest>=7",
+]
+video = [
+  "imageio-ffmpeg==0.6.0",
+]
+release = [
+  "imageio-ffmpeg==0.6.0",
+  "pyinstaller==6.21.0",
 ]
 
 [project.scripts]

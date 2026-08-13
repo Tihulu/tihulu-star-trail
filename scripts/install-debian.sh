@@ -103,10 +103,10 @@ fi
 . "$VENV_DIR/bin/activate"
 if [ "$INSTALL_DEPS" -eq 1 ]; then
   python -m pip install --upgrade pip setuptools wheel
-  python -m pip install -e "$PROJECT_DIR"
+  python -m pip install -e "$PROJECT_DIR[video]"
 else
   python -m pip install -e "$PROJECT_DIR" --no-deps
-  python -m pip install rawpy
+  python -m pip install rawpy "imageio-ffmpeg==0.6.0"
 fi
 
 python - <<'PYDEPS'
@@ -117,6 +117,7 @@ modules = {
     "numpy": "numpy or python3-numpy",
     "PIL": "Pillow or python3-pillow",
     "rawpy": "rawpy",
+    "imageio_ffmpeg": "imageio-ffmpeg",
     "tkinter": "python3-tk tk-dev",
 }
 missing = []
@@ -128,8 +129,14 @@ for module, package in modules.items():
 
 if missing:
     raise SystemExit("Missing Tihulu dependency imports:\n" + "\n".join(missing))
-print("Verified Python dependencies: cv2, numpy, PIL, rawpy, tkinter")
+print("Verified Python dependencies: cv2, numpy, PIL, rawpy, imageio-ffmpeg, tkinter")
 PYDEPS
+
+python - <<'PYVIDEO'
+from tihulu_star_trail.stacker import check_video_dependencies
+
+print(f"Verified bundled video export dependency: {check_video_dependencies(require_bundled=True)}")
+PYVIDEO
 
 mkdir -p "$BIN_DIR"
 {
