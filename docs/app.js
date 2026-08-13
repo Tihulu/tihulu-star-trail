@@ -9,6 +9,8 @@ const settingsInfoButton = document.querySelector("#settingsInfoButton");
 const settingsInfo = document.querySelector("#settingsInfo");
 const timeMetadataToggle = document.querySelector("#timeMetadata");
 const timeWindowInput = document.querySelector("#timeWindowHours") || document.querySelector("#timeWindowMinutes");
+const maxSideInput = document.querySelector("#maxSide");
+const keepOriginalSizeToggle = document.querySelector("#keepOriginalSize");
 const logOutput = document.querySelector("#logOutput");
 const groupsPanel = document.querySelector("#groupsPanel");
 const groupTitle = document.querySelector("#groupTitle");
@@ -95,7 +97,8 @@ function settings() {
   return {
     threshold: Number(document.querySelector("#threshold").value),
     thumbSide: Number(document.querySelector("#thumbSide").value),
-    maxSide: Number(document.querySelector("#maxSide").value),
+    maxSide: Number(maxSideInput.value),
+    keepOriginalSize: Boolean(keepOriginalSizeToggle?.checked),
     imageFormat,
     imageQuality,
     imageQualityRatio: imageQuality / 100,
@@ -119,6 +122,12 @@ function setBusy(busy) {
   });
   statusChip.textContent = busy ? "WORKING" : "BROWSER";
   renderEditor();
+}
+
+function updateOutputSizeControls() {
+  if (!maxSideInput || !keepOriginalSizeToggle) return;
+  maxSideInput.disabled = keepOriginalSizeToggle.checked;
+  maxSideInput.setAttribute("aria-disabled", keepOriginalSizeToggle.checked ? "true" : "false");
 }
 
 function setDownload(url, filename) {
@@ -1442,7 +1451,7 @@ function isTypingTarget(target) {
 async function renderTrail(selected, options) {
   const firstFrame = await firstDecodedFrame(selected);
   const first = firstFrame.bitmap;
-  fitCanvas(previewCanvas, first.width, first.height, options.maxSide);
+  fitCanvas(previewCanvas, first.width, first.height, options.maxSide, options.keepOriginalSize);
   const width = previewCanvas.width;
   const height = previewCanvas.height;
   const ctx = previewCanvas.getContext("2d", {willReadFrequently: true});
@@ -1543,7 +1552,7 @@ async function renderTimelapse(selected, options) {
     throw new Error("This browser cannot record canvas video.");
   }
   const firstFrame = await firstDecodedFrame(selected);
-  fitCanvas(previewCanvas, firstFrame.bitmap.width, firstFrame.bitmap.height, options.maxSide);
+  fitCanvas(previewCanvas, firstFrame.bitmap.width, firstFrame.bitmap.height, options.maxSide, options.keepOriginalSize);
   const ctx = previewCanvas.getContext("2d");
   const stream = previewCanvas.captureStream(options.fps);
   const mimeType = supportedVideoMimeType(options.videoFormat);
@@ -1628,8 +1637,8 @@ function decodeErrorMessage(error) {
   return message;
 }
 
-function fitCanvas(canvas, width, height, maxSide) {
-  const scale = Math.min(maxSide / Math.max(width, height), 1);
+function fitCanvas(canvas, width, height, maxSide, keepOriginalSize = false) {
+  const scale = keepOriginalSize ? 1 : Math.min(maxSide / Math.max(width, height), 1);
   canvas.width = Math.max(1, Math.round(width * scale));
   canvas.height = Math.max(1, Math.round(height * scale));
 }
@@ -1732,5 +1741,7 @@ function startStarfield() {
 const CYAN = "#43f7ff";
 const PINK = "#ff2bd6";
 startStarfield();
+keepOriginalSizeToggle?.addEventListener("change", updateOutputSizeControls);
+updateOutputSizeControls();
 updateVideoFormatSupport();
 renderEditor();

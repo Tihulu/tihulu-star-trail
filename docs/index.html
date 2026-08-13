@@ -38,7 +38,7 @@
               </div>
               <div>
                 <dt>Output Max Side</dt>
-                <dd>1200-1800 is good for sharing. 2400-3840 is sharper, slower, and heavier.</dd>
+                <dd>Sets the longest output edge when Keep Original Size is off. Turn Keep Original Size on to export at the source dimensions with no resizing or stretching.</dd>
               </div>
               <div>
                 <dt>Image Format</dt>
@@ -66,7 +66,7 @@
               </div>
               <div>
                 <dt>Time Window Hours</dt>
-                <dd>2-6 separates short sessions. 8-24 keeps overnight shoots together across midnight.</dd>
+                <dd>Photos taken within this many hours are more likely to stay in the same group.</dd>
               </div>
             </dl>
           </aside>
@@ -83,6 +83,10 @@
             <label class="field">
               <span>Output Max Side</span>
               <input id="maxSide" type="number" min="320" max="3840" step="160" value="1600">
+            </label>
+            <label class="check-field">
+              <input id="keepOriginalSize" type="checkbox">
+              <span>Keep Original Size</span>
             </label>
             <label class="field">
               <span>Image Format</span>
