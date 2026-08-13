@@ -1,5 +1,7 @@
 # Tihulu Star Trail
 
+**Hosted Web App:** https://tihulu.github.io/tihulu-star-trail/
+
 Tihulu Star Trail is a small open source command line program for Debian-based Linux systems, including Pop!_OS. It scans a folder or SD card, groups photos that look like they were taken from the same camera angle, and creates a star trail image for each group.
 
 The grouping step uses OpenCV feature matching and a RANSAC homography check. In plain English: it looks for visual points that agree with each other geometrically, then groups images by how likely they are to share the same viewpoint.
