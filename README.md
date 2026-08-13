@@ -10,6 +10,9 @@ The grouping step uses OpenCV feature matching and a RANSAC homography check. In
 
 - Recursively scans an SD card or photo folder.
 - Opens a native Debian/Pop!_OS desktop app with `tihulu desktop`.
+- Gives the native desktop app a manual group review workspace with multi-select photo moves/removal, group creation/renaming/reordering, 50-step undo, RAW-capable previews, and edited-group export.
+- Previews completed trail images and plays completed timelapses inside the native desktop app.
+- Lets native desktop users choose JPEG/PNG, MP4/WebM, output dimensions, original-size image export, video bitrate, and custom single-output names.
 - Keeps the local browser interface available with `tihulu ui`.
 - Includes a static GitHub Pages web app for browser-readable photo sets.
 - Groups images by likely camera angle.
@@ -37,7 +40,7 @@ curl -fsSL https://raw.githubusercontent.com/Tihulu/tihulu-star-trail/main/scrip
 
 The installer adds a launcher at `~/.local/bin/tihulu` and a Pop!_OS/GNOME application entry named **Tihulu Star Trail**. That launcher opens the native Linux desktop app. If `~/.local/bin` is not already on your `PATH`, run the command with the full path or add it to your shell profile.
 
-If `pyenv` is installed in your `PATH` or at `~/.pyenv`, the installer uses Python `3.12.8` from pyenv and installs all Python dependencies with pip: `opencv-python-headless`, `numpy`, `Pillow`, and `rawpy`. The installer also installs small Debian desktop packages when apt is available: `python3-tk`, `tk-dev`, and `xdg-utils`. If `pyenv` is not installed, it uses native Debian packages through apt where possible and installs `rawpy` with pip. Pyenv itself may need system build dependencies the first time it compiles Python. The installer verifies that `cv2`, `numpy`, `PIL`, `rawpy`, and `tkinter` import successfully before it finishes.
+If `pyenv` is installed in your `PATH` or at `~/.pyenv`, the installer uses Python `3.12.8` from pyenv and installs all Python dependencies with pip: `opencv-python-headless`, `numpy`, `Pillow`, and `rawpy`. The installer also installs Debian desktop packages when apt is available: `python3-tk`, `tk-dev`, `xdg-utils`, and `ffmpeg`. FFmpeg applies the requested video bitrate when available. If `pyenv` is not installed, it uses native Debian packages through apt where possible and installs `rawpy` with pip. Pyenv itself may need system build dependencies the first time it compiles Python. The installer verifies that `cv2`, `numpy`, `PIL`, `rawpy`, and `tkinter` import successfully before it finishes.
 
 From inside a cloned repository, you can run the same installer locally:
 
@@ -208,4 +211,3 @@ The expected public repository URL is `https://github.com/Tihulu/tihulu-star-tra
 ## License
 
 MIT License. See [LICENSE](LICENSE).
-

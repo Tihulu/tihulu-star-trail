@@ -29,8 +29,8 @@ if ! command -v pyenv >/dev/null 2>&1 && [ -x "$PYENV_ROOT/bin/pyenv" ]; then
 fi
 
 if command -v pyenv >/dev/null 2>&1; then
-  if ! apt_install git python3-tk tk-dev xdg-utils; then
-    echo "Tip: install native desktop packages with: sudo apt install git python3-tk tk-dev xdg-utils" >&2
+  if ! apt_install git python3-tk tk-dev xdg-utils ffmpeg; then
+    echo "Tip: install native desktop packages with: sudo apt install git python3-tk tk-dev xdg-utils ffmpeg" >&2
   fi
 
   if ! pyenv versions --bare | grep -qx "$PYENV_VERSION"; then
@@ -49,6 +49,7 @@ else
     python3-pillow \
     python3-tk \
     tk-dev \
+    ffmpeg \
     xdg-utils; then
     echo "This installer needs sudo for apt packages, or pyenv for a user-local install." >&2
     exit 1

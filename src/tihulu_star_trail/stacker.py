@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import shutil
+import subprocess
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable, Iterable
 
@@ -15,6 +17,7 @@ def stack_lighten(
     output_path: Path,
     jpeg_quality: int = 95,
     resize_to_first: bool = True,
+    max_side: int | None = None,
     progress: Progress | None = None,
 ) -> Path:
     import cv2
@@ -25,6 +28,9 @@ def stack_lighten(
         raise ValueError("No images were provided for stacking.")
 
     first = read_bgr(ordered_paths[0])
+    target_size = _image_target_size(first.shape[1], first.shape[0], max_side=max_side)
+    if (first.shape[1], first.shape[0]) != target_size:
+        first = cv2.resize(first, target_size, interpolation=cv2.INTER_AREA)
     base_height, base_width = first.shape[:2]
     stack = first.copy()
 
@@ -55,6 +61,7 @@ def render_timelapse(
     fps: float = 24.0,
     codec: str = "mp4v",
     max_side: int | None = 1920,
+    bitrate_mbps: float | None = None,
     progress: Progress | None = None,
 ) -> Path:
     import cv2
@@ -74,8 +81,13 @@ def render_timelapse(
 
     first = read_bgr(ordered_paths[0])
     frame_size = _target_size(first.shape[1], first.shape[0], max_side=max_side)
+    intermediate_path = (
+        output_path.with_name(f".{output_path.stem}.recording{output_path.suffix}")
+        if bitrate_mbps and bitrate_mbps > 0 and shutil.which("ffmpeg")
+        else output_path
+    )
     writer = cv2.VideoWriter(
-        str(output_path),
+        str(intermediate_path),
         cv2.VideoWriter_fourcc(*codec),
         float(fps),
         frame_size,
@@ -94,6 +106,9 @@ def render_timelapse(
     finally:
         writer.release()
 
+    if intermediate_path != output_path:
+        _apply_video_bitrate(intermediate_path, output_path, bitrate_mbps or 8.0, progress)
+
     return output_path
 
 
@@ -102,6 +117,8 @@ def render_group_trails(
     output_dir: Path,
     min_frames: int = 2,
     jpeg_quality: int = 95,
+    image_format: str = "jpeg",
+    max_side: int | None = None,
     progress: Progress | None = None,
 ) -> list[Path]:
     output_dir = Path(output_dir)
@@ -113,7 +130,8 @@ def render_group_trails(
             if progress is not None:
                 progress(f"Skipping {group.name}: only {len(group.photos)} frame(s)")
             continue
-        output_path = output_dir / f"{group.name}_star_trail.jpg"
+        extension = ".png" if image_format.lower() == "png" else ".jpg"
+        output_path = output_dir / f"{group.name}_star_trail{extension}"
         if progress is not None:
             progress(f"Rendering {output_path.name} from {len(group.photos)} frames")
         rendered.append(
@@ -121,6 +139,7 @@ def render_group_trails(
                 [photo.path for photo in group.photos],
                 output_path,
                 jpeg_quality=jpeg_quality,
+                max_side=max_side,
                 progress=progress,
             )
         )
@@ -134,6 +153,8 @@ def render_group_timelapses(
     fps: float = 24.0,
     codec: str = "mp4v",
     max_side: int | None = 1920,
+    video_format: str = "mp4",
+    bitrate_mbps: float | None = None,
     progress: Progress | None = None,
 ) -> list[Path]:
     output_dir = Path(output_dir)
@@ -145,7 +166,8 @@ def render_group_timelapses(
             if progress is not None:
                 progress(f"Skipping {group.name}: only {len(group.photos)} frame(s)")
             continue
-        output_path = output_dir / f"{group.name}_timelapse.mp4"
+        extension = ".webm" if video_format.lower() == "webm" else ".mp4"
+        output_path = output_dir / f"{group.name}_timelapse{extension}"
         if progress is not None:
             progress(f"Rendering {output_path.name} from {len(group.photos)} frames")
         rendered.append(
@@ -155,6 +177,7 @@ def render_group_timelapses(
                 fps=fps,
                 codec=codec,
                 max_side=max_side,
+                bitrate_mbps=bitrate_mbps,
                 progress=progress,
             )
         )
@@ -166,6 +189,8 @@ def render_trails_from_group_dirs(
     output_dir: Path,
     min_frames: int = 2,
     jpeg_quality: int = 95,
+    image_format: str = "jpeg",
+    max_side: int | None = None,
     progress: Progress | None = None,
 ) -> list[Path]:
     group_dirs = discover_group_dirs(input_dir)
@@ -181,7 +206,8 @@ def render_trails_from_group_dirs(
             if progress is not None:
                 progress(f"Skipping {group_dir.name}: only {len(images)} frame(s)")
             continue
-        output_path = output_dir / f"{group_dir.name}_star_trail.jpg"
+        extension = ".png" if image_format.lower() == "png" else ".jpg"
+        output_path = output_dir / f"{group_dir.name}_star_trail{extension}"
         if progress is not None:
             progress(f"Rendering {output_path.name} from {len(images)} frames")
         rendered.append(
@@ -189,6 +215,7 @@ def render_trails_from_group_dirs(
                 images,
                 output_path,
                 jpeg_quality=jpeg_quality,
+                max_side=max_side,
                 progress=progress,
             )
         )
@@ -202,6 +229,8 @@ def render_timelapses_from_group_dirs(
     fps: float = 24.0,
     codec: str = "mp4v",
     max_side: int | None = 1920,
+    video_format: str = "mp4",
+    bitrate_mbps: float | None = None,
     progress: Progress | None = None,
 ) -> list[Path]:
     group_dirs = discover_group_dirs(input_dir)
@@ -217,7 +246,8 @@ def render_timelapses_from_group_dirs(
             if progress is not None:
                 progress(f"Skipping {group_dir.name}: only {len(images)} frame(s)")
             continue
-        output_path = output_dir / f"{group_dir.name}_timelapse.mp4"
+        extension = ".webm" if video_format.lower() == "webm" else ".mp4"
+        output_path = output_dir / f"{group_dir.name}_timelapse{extension}"
         if progress is not None:
             progress(f"Rendering {output_path.name} from {len(images)} frames")
         rendered.append(
@@ -227,6 +257,7 @@ def render_timelapses_from_group_dirs(
                 fps=fps,
                 codec=codec,
                 max_side=max_side,
+                bitrate_mbps=bitrate_mbps,
                 progress=progress,
             )
         )
@@ -263,3 +294,45 @@ def _target_size(width: int, height: int, max_side: int | None) -> tuple[int, in
     if target_height % 2:
         target_height += 1
     return target_width, target_height
+
+
+def _image_target_size(
+    width: int, height: int, max_side: int | None
+) -> tuple[int, int]:
+    if max_side is None or max_side <= 0:
+        return width, height
+    scale = min(float(max_side) / float(max(width, height)), 1.0)
+    return max(1, int(round(width * scale))), max(1, int(round(height * scale)))
+
+
+def _apply_video_bitrate(
+    source: Path,
+    output: Path,
+    bitrate_mbps: float,
+    progress: Progress | None,
+) -> None:
+    codec = "libvpx-vp9" if output.suffix.lower() == ".webm" else "libx264"
+    command = [
+        "ffmpeg",
+        "-y",
+        "-loglevel",
+        "error",
+        "-i",
+        str(source),
+        "-an",
+        "-c:v",
+        codec,
+        "-b:v",
+        f"{max(float(bitrate_mbps), 0.1):g}M",
+        str(output),
+    ]
+    if progress is not None:
+        progress(f"Applying {bitrate_mbps:g} Mbps video quality")
+    try:
+        subprocess.run(command, check=True, capture_output=True, text=True)
+    except (OSError, subprocess.CalledProcessError) as error:
+        if progress is not None:
+            progress(f"FFmpeg bitrate pass unavailable; keeping direct recording ({error})")
+        source.replace(output)
+    else:
+        source.unlink(missing_ok=True)

@@ -26,6 +26,17 @@ def test_stack_lighten_uses_pixelwise_maximum(tmp_path: Path) -> None:
     assert result[2, 2].tolist() == [3, 200, 9]
 
 
+def test_stack_lighten_preserves_original_dimensions_without_max_side(tmp_path: Path) -> None:
+    frame = np.zeros((13, 17, 3), dtype=np.uint8)
+    source = tmp_path / "source.png"
+    output = tmp_path / "trail.png"
+    write_bgr(source, frame)
+
+    stack_lighten([source], output, max_side=None)
+
+    assert read_bgr(output).shape[:2] == (13, 17)
+
+
 def test_render_timelapse_creates_video(tmp_path: Path) -> None:
     paths = []
     for index in range(3):
