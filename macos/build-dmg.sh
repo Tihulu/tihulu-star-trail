@@ -70,12 +70,22 @@ codesign --verify --deep --strict "$APP_BUNDLE"
 cp -R "$APP_BUNDLE" "$DMG_ROOT/"
 ln -s /Applications "$DMG_ROOT/Applications"
 rm -f "$DMG_FILE"
-hdiutil create \
+create_attempt=1
+while ! hdiutil create \
   -volname "$APP_NAME $VERSION" \
   -srcfolder "$DMG_ROOT" \
   -format UDZO \
   -ov \
-  "$DMG_FILE" >/dev/null
+  "$DMG_FILE" >/dev/null; do
+  if [ "$create_attempt" -ge 3 ]; then
+    echo "Could not create $DMG_FILE after $create_attempt attempts." >&2
+    exit 1
+  fi
+  echo "DMG creation was temporarily unavailable; retrying..." >&2
+  rm -f "$DMG_FILE"
+  create_attempt=$((create_attempt + 1))
+  sleep 5
+done
 sync
 verify_attempt=1
 while ! hdiutil verify "$DMG_FILE" >/dev/null; do
