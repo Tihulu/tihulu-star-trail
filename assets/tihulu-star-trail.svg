@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="Tihulu Star Trail">
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="45%" r="70%">
+      <stop offset="0" stop-color="#17213a"/>
+      <stop offset="0.55" stop-color="#07101f"/>
+      <stop offset="1" stop-color="#02040a"/>
+    </radialGradient>
+    <linearGradient id="ring" x1="24" y1="28" x2="230" y2="230" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#43f7ff"/>
+      <stop offset="0.48" stop-color="#ff2bd6"/>
+      <stop offset="1" stop-color="#f5f25c"/>
+    </linearGradient>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="4" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  <rect width="256" height="256" rx="54" fill="url(#bg)"/>
+  <path d="M30 181c44 31 123 31 174-4" fill="none" stroke="#43f7ff" stroke-width="5" stroke-linecap="round" opacity="0.35"/>
+  <g fill="none" stroke-linecap="round" filter="url(#glow)">
+    <path d="M54 157c24-62 99-91 160-56" stroke="#43f7ff" stroke-width="7"/>
+    <path d="M36 132c41-70 130-86 184-35" stroke="#ff2bd6" stroke-width="5" opacity="0.95"/>
+    <path d="M72 183c28-43 88-59 137-31" stroke="#f5f25c" stroke-width="4" opacity="0.9"/>
+  </g>
+  <circle cx="128" cy="128" r="9" fill="#f2fbff" filter="url(#glow)"/>
+  <g fill="#f2fbff">
+    <circle cx="67" cy="65" r="3"/>
+    <circle cx="92" cy="43" r="2"/>
+    <circle cx="184" cy="53" r="2.5"/>
+    <circle cx="207" cy="133" r="2"/>
+    <circle cx="45" cy="119" r="2"/>
+    <circle cx="158" cy="84" r="2"/>
+  </g>
+  <path d="M126 116l7 18 19 1-15 12 5 19-16-10-16 10 5-19-15-12 19-1z" fill="#43f7ff" opacity="0.9"/>
+  <rect x="28" y="28" width="200" height="200" rx="42" fill="none" stroke="url(#ring)" stroke-width="4" opacity="0.9"/>
+</svg>

@@ -24,7 +24,7 @@ One-line install:
 curl -fsSL https://raw.githubusercontent.com/Tihulu/tihulu-star-trail/main/scripts/install-debian.sh | sh
 ```
 
-The installer adds a launcher at `~/.local/bin/tihulu`. If that folder is not already on your `PATH`, run the command with the full path or add it to your shell profile.
+The installer adds a launcher at `~/.local/bin/tihulu` and a Pop!_OS/GNOME application entry named **Tihulu Star Trail**. If `~/.local/bin` is not already on your `PATH`, run the command with the full path or add it to your shell profile.
 
 If `pyenv` is installed, the installer uses Python `3.12.8` from pyenv and installs Python dependencies with pip. If `pyenv` is not installed, it uses native Debian packages through apt. Pyenv itself may need system build dependencies the first time it compiles Python.
 
@@ -66,7 +66,7 @@ pip install -e .
 
 ## Quick Start
 
-Open the local interface:
+Open the local interface from Applications by launching **Tihulu Star Trail**, or from a terminal:
 
 ```bash
 tihulu ui
@@ -92,6 +92,12 @@ tihulu-output/
 ```
 
 By default, group folders contain symlinks to your original images. Your SD card photos are not modified.
+
+Install or refresh the Pop!_OS application launcher manually:
+
+```bash
+./scripts/install-desktop-entry.sh
+```
 
 ## Useful Commands
 

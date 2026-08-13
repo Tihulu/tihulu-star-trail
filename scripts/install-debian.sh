@@ -37,7 +37,7 @@ else
     python3-numpy \
     python3-pillow
 
-  PYTHON_BIN=python3
+  PYTHON_BIN=/usr/bin/python3
   INSTALL_DEPS=0
 fi
 
@@ -63,10 +63,10 @@ fi
 "$PYTHON_BIN" -m venv --system-site-packages "$PROJECT_DIR/.venv"
 . "$PROJECT_DIR/.venv/bin/activate"
 if [ "$INSTALL_DEPS" -eq 1 ]; then
-  pip install -e "$PROJECT_DIR"
+  python -m pip install -e "$PROJECT_DIR"
 else
-  pip install -e "$PROJECT_DIR" --no-deps
-  pip install rawpy
+  python -m pip install -e "$PROJECT_DIR" --no-deps
+  python -m pip install rawpy
 fi
 
 mkdir -p "$BIN_DIR"
@@ -77,8 +77,13 @@ mkdir -p "$BIN_DIR"
 } > "$BIN_DIR/tihulu"
 chmod +x "$BIN_DIR/tihulu"
 
+if [ -x "$PROJECT_DIR/scripts/install-desktop-entry.sh" ]; then
+  TIHULU_INSTALL_DIR="$PROJECT_DIR" TIHULU_BIN_DIR="$BIN_DIR" "$PROJECT_DIR/scripts/install-desktop-entry.sh"
+fi
+
 echo "Tihulu Star Trail is installed."
 echo "Try: $BIN_DIR/tihulu --help"
+echo "Open the interface from Applications as: Tihulu Star Trail"
 case ":$PATH:" in
   *":$BIN_DIR:"*) ;;
   *) echo "Tip: add $BIN_DIR to your PATH to run tihulu from any terminal." ;;
