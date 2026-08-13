@@ -6,8 +6,8 @@ Tihulu Star Trail provides native desktop installation for macOS and Debian-base
 
 | System | Native desktop app | Installer |
 | --- | --- | --- |
-| macOS 11 or newer | `Tihulu Star Trail.app` | `macos/install.sh` |
-| Debian, Ubuntu, Pop!_OS | Application-menu entry | `scripts/install-debian.sh` |
+| macOS 11 or newer | `Tihulu Star Trail.app` | Release DMG or `macos/install.sh` |
+| Debian 12, Ubuntu 22.04, Pop!_OS 22.04, or newer | AppImage or application-menu entry | Release AppImage or `scripts/install-debian.sh` |
 | Other operating systems | Use the hosted or local browser app | Manual Python installation may work but is not currently packaged |
 
 ## macOS
@@ -15,14 +15,25 @@ Tihulu Star Trail provides native desktop installation for macOS and Debian-base
 ### Requirements
 
 - macOS 11 or newer.
-- [Homebrew](https://brew.sh/).
 - An internet connection during the first installation.
 
-The installer uses Homebrew to install Python 3.12, Tk, and FFmpeg. It does not require `sudo` for the default user-local installation.
+The release DMG contains a standalone application and does not require Python or Homebrew. The one-line command installs [Homebrew](https://brew.sh/) when it is missing, then uses it to install Python 3.12, Tk, FFmpeg, Git when needed, and all Python dependencies.
+
+### DMG Installation
+
+1. Open the [latest GitHub Release](https://github.com/Tihulu/tihulu-star-trail/releases/latest).
+2. Download `arm64.dmg` for an Apple Silicon Mac, or `x86_64.dmg` for an Intel Mac.
+3. Open the DMG.
+4. Drag **Tihulu Star Trail** into the Applications shortcut.
+5. Open the app from Applications.
+
+Release builds are ad-hoc signed but not Apple-notarized. On the first launch, macOS may require you to Control-click **Tihulu Star Trail**, choose **Open**, and confirm the prompt.
+
+The DMG application is standalone. The Homebrew-based method below remains useful when you also want the `tihulu` command-line launcher.
 
 ### One-Line Installation
 
-Open Terminal and run:
+Open Terminal and run the command below. It installs Homebrew and every required dependency when they are missing:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/Tihulu/tihulu-star-trail/main/macos/install.sh | sh
@@ -73,7 +84,7 @@ If `tihulu` is not found without its full path, add `~/.local/bin` to your shell
 
 ### macOS Troubleshooting
 
-- If `brew` is not found, install Homebrew and rerun the installer.
+- If automatic Homebrew installation is interrupted, rerun the same one-line installer; it detects and continues an existing Homebrew setup.
 - If the app does not open, inspect `~/Library/Logs/Tihulu Star Trail.log`.
 - If Tk is missing, run `brew install python@3.12 python-tk@3.12` and rerun `./macos/install.sh`.
 - If video export is unavailable, run `brew install ffmpeg`.
@@ -84,9 +95,21 @@ The same installer supports Debian-based distributions including Ubuntu and Pop!
 
 ### Requirements
 
-- A Debian-based Linux distribution with `apt`.
-- `sudo` access for system packages, or an existing pyenv installation.
+- An x86_64 Debian 12, Ubuntu 22.04, Pop!_OS 22.04, or newer compatible distribution for the AppImage.
+- A Debian-based Linux distribution with `apt` for the installation script.
+- `sudo` access for installer-managed system packages, or an existing pyenv installation.
 - An internet connection during the first installation.
+
+### AppImage Installation
+
+Download the `linux-x86_64.AppImage` file from the [latest GitHub Release](https://github.com/Tihulu/tihulu-star-trail/releases/latest), then run:
+
+```sh
+chmod +x Tihulu-Star-Trail-*-linux-x86_64.AppImage
+./Tihulu-Star-Trail-*-linux-x86_64.AppImage
+```
+
+The AppImage contains the application and Python dependencies. It does not modify the system or create an application-menu entry. Use the installation script below for managed desktop integration.
 
 ### One-Line Installation
 

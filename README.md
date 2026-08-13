@@ -2,6 +2,8 @@
 
 **Hosted Web App:** https://tihulu.github.io/tihulu-star-trail/
 
+**Native Downloads:** https://github.com/Tihulu/tihulu-star-trail/releases/latest
+
 **OS Installation Guide:** [docs/INSTALLATION.md](docs/INSTALLATION.md)
 
 Tihulu Star Trail is an open source native desktop and command-line application for macOS and Debian-based Linux systems, including Pop!_OS. It scans a folder or SD card, groups photos that look like they were taken from the same camera angle, and creates a star trail image for each group.
@@ -37,13 +39,20 @@ The grouping step uses OpenCV feature matching and a RANSAC homography check. In
 
 For requirements, install locations, verification, and troubleshooting, see the [complete macOS installation documentation](docs/INSTALLATION.md#macos).
 
-Homebrew is required. Install Tihulu and create `~/Applications/Tihulu Star Trail.app` with:
+Download the DMG for your Mac from the [latest GitHub Release](https://github.com/Tihulu/tihulu-star-trail/releases/latest):
+
+- Apple Silicon (`M1`, `M2`, `M3`, `M4`, or newer): download the `arm64.dmg` file.
+- Intel Mac: download the `x86_64.dmg` file.
+
+Open the DMG and drag **Tihulu Star Trail** into the Applications shortcut. Release builds are ad-hoc signed but not Apple-notarized, so the first launch may require Control-clicking the app and choosing **Open**.
+
+The command-line installer remains available when you prefer a managed installation. The same one-line command installs Homebrew when it is missing, then installs Python 3.12, Tk, FFmpeg, Git when needed, and every Python dependency:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/Tihulu/tihulu-star-trail/main/macos/install.sh | sh
 ```
 
-The installer uses Homebrew `python@3.12`, `python-tk@3.12`, and `ffmpeg`, creates an isolated runtime under `~/Library/Application Support/Tihulu Star Trail`, installs the CLI at `~/.local/bin/tihulu`, and builds a normal macOS application bundle. No Terminal window is shown when the app is launched from Applications, and the installed app keeps working if the original cloned repository is moved or deleted.
+The installer uses the official Homebrew installer when necessary, installs Homebrew `python@3.12`, `python-tk@3.12`, and `ffmpeg`, creates an isolated runtime under `~/Library/Application Support/Tihulu Star Trail`, installs the CLI at `~/.local/bin/tihulu`, and builds a normal macOS application bundle. No Terminal window is shown when the app is launched from Applications, and the installed app keeps working if the original cloned repository is moved or deleted.
 
 From a cloned repository, install or refresh the macOS app with:
 
@@ -62,6 +71,15 @@ The default install is user-local and does not require `sudo`. Set `TIHULU_APP_D
 ## Install On Debian Or Pop!_OS
 
 For requirements, install locations, verification, and troubleshooting, see the [complete Debian/Pop!_OS installation documentation](docs/INSTALLATION.md#debian-and-pop_os).
+
+Download the `linux-x86_64.AppImage` file from the [latest GitHub Release](https://github.com/Tihulu/tihulu-star-trail/releases/latest), make it executable, and run it:
+
+```bash
+chmod +x Tihulu-Star-Trail-*-linux-x86_64.AppImage
+./Tihulu-Star-Trail-*-linux-x86_64.AppImage
+```
+
+The AppImage is self-contained and targets x86_64 Debian 12, Ubuntu 22.04, Pop!_OS 22.04, and newer compatible distributions. Use the installer below when you want a managed virtual environment, command-line launcher, and application-menu entry.
 
 One-line install:
 

@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=Tihulu Star Trail
+GenericName=Star Trail Processor
+Comment=Group night-sky photos, build star trails, and render timelapses
+Exec=tihulu-star-trail
+Icon=tihulu-star-trail
+Terminal=false
+Categories=Graphics;Photography;
+Keywords=star;trail;astrophotography;timelapse;raw;camera;
+StartupNotify=true
+StartupWMClass=TihuluStarTrail

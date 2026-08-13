@@ -1,0 +1,6 @@
+#!/bin/sh
+set -eu
+
+APPDIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+export PATH="$APPDIR/usr/bin:$PATH"
+exec "$APPDIR/usr/bin/tihulu-star-trail" "$@"

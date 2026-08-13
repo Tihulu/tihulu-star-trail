@@ -14,8 +14,23 @@ APP_DIR=${TIHULU_APP_DIR:-$HOME/Applications}
 BIN_DIR=${TIHULU_BIN_DIR:-$HOME/.local/bin}
 
 if ! command -v brew >/dev/null 2>&1; then
-  echo "Homebrew is required. Install it from https://brew.sh and run this installer again." >&2
-  exit 1
+  echo "Homebrew is not installed. Installing it from the official Homebrew installer..."
+  BREW_INSTALLER=$(mktemp "${TMPDIR:-/tmp}/tihulu-homebrew.XXXXXX")
+  trap 'rm -f "$BREW_INSTALLER"' EXIT HUP INT TERM
+  curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh -o "$BREW_INSTALLER"
+  /bin/bash "$BREW_INSTALLER"
+  rm -f "$BREW_INSTALLER"
+  trap - EXIT HUP INT TERM
+
+  if [ -x /opt/homebrew/bin/brew ]; then
+    BREW_BIN=/opt/homebrew/bin/brew
+  elif [ -x /usr/local/bin/brew ]; then
+    BREW_BIN=/usr/local/bin/brew
+  else
+    echo "Homebrew installation finished, but brew could not be found." >&2
+    exit 1
+  fi
+  eval "$($BREW_BIN shellenv)"
 fi
 
 brew install python@3.12 python-tk@3.12 ffmpeg

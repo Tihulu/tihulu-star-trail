@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>com.tihulu.startrail</id>
+  <name>Tihulu Star Trail</name>
+  <summary>Group night-sky photos and build star trail images</summary>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+  <description>
+    <p>
+      Tihulu Star Trail groups night-sky photos by camera angle, creates
+      star-trail images, and renders timelapse videos while preserving the
+      original photographs.
+    </p>
+  </description>
+  <launchable type="desktop-id">tihulu-star-trail.desktop</launchable>
+  <url type="homepage">https://github.com/Tihulu/tihulu-star-trail</url>
+  <provides>
+    <binary>tihulu-star-trail</binary>
+  </provides>
+</component>
