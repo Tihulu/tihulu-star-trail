@@ -47,7 +47,9 @@ let editSelectionMode = false;
 let selectedPhotoKeys = new Set();
 let dragSelection = null;
 let dragPayload = null;
+let groupDragPayload = null;
 let suppressPhotoClick = false;
+let suppressGroupClick = false;
 
 const SIGNATURE_CELLS = 12;
 const MAX_UNDO_STATES = 50;
@@ -134,6 +136,7 @@ function chooseFiles(nextFiles) {
   selectedPhotoKeys.clear();
   dragSelection = null;
   dragPayload = null;
+  groupDragPayload = null;
   photoStripKey = "";
   clearDownload();
   groupsPanel.innerHTML = "";
@@ -215,6 +218,7 @@ analyzeButton.addEventListener("click", async () => {
     selectedPhotoKeys.clear();
     dragSelection = null;
     dragPayload = null;
+    groupDragPayload = null;
     photoStripKey = "";
     renderGroups();
     renderEditor();
@@ -572,8 +576,10 @@ async function renderGroups() {
     const card = document.createElement("button");
     card.type = "button";
     card.disabled = isBusy;
+    card.draggable = Boolean(groups.length > 1 && !isBusy);
     card.className = `group-card${index === selectedGroup ? " active" : ""}`;
     card.dataset.groupIndex = String(index);
+    card.title = "Drag to reorder groups";
 
     const title = document.createElement("strong");
     title.textContent = groupLabel(index);
@@ -593,11 +599,22 @@ async function renderGroups() {
 
     card.append(title, meta, strip);
     attachGroupDropHandlers(card, String(index));
+    card.addEventListener("dragstart", (event) => {
+      handleGroupDragStart(event, index);
+    });
+    card.addEventListener("dragend", () => {
+      handleGroupDragEnd();
+    });
     card.addEventListener("click", async () => {
+      if (suppressGroupClick) {
+        suppressGroupClick = false;
+        return;
+      }
       selectedGroup = index;
       selectedPhotoIndex = 0;
       selectedPhotoKeys.clear();
       dragPayload = null;
+      groupDragPayload = null;
       renderGroups();
       renderEditor();
       await previewCurrentPhoto();
@@ -609,6 +626,7 @@ async function renderGroups() {
     const newGroupCard = document.createElement("button");
     newGroupCard.type = "button";
     newGroupCard.disabled = isBusy;
+    newGroupCard.draggable = false;
     newGroupCard.className = "group-card new-group-drop";
     const title = document.createElement("strong");
     title.textContent = "NEW GROUP";
@@ -625,22 +643,35 @@ async function renderGroups() {
 
 function attachGroupDropHandlers(card, targetValue) {
   card.addEventListener("dragover", (event) => {
-    if (!canDropToGroup(targetValue)) return;
+    if (canDropGroupToPosition(targetValue)) {
+      event.preventDefault();
+      event.dataTransfer.dropEffect = "move";
+      card.classList.add("reorder-target");
+      return;
+    }
+    if (!canDropPhotosToGroup(targetValue)) return;
     event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
     card.classList.add("drop-target");
   });
   card.addEventListener("dragleave", () => {
-    card.classList.remove("drop-target");
+    card.classList.remove("drop-target", "reorder-target");
   });
   card.addEventListener("drop", async (event) => {
-    if (!canDropToGroup(targetValue)) return;
+    if (canDropGroupToPosition(targetValue)) {
+      event.preventDefault();
+      card.classList.remove("drop-target", "reorder-target");
+      await reorderGroup(groupDragPayload.sourceGroup, Number(targetValue));
+      return;
+    }
+    if (!canDropPhotosToGroup(targetValue)) return;
     event.preventDefault();
-    card.classList.remove("drop-target");
+    card.classList.remove("drop-target", "reorder-target");
     await movePhotoKeysToGroup(dragPayload.sourceGroup, dragPayload.keys, targetValue);
   });
 }
 
-function canDropToGroup(targetValue) {
+function canDropPhotosToGroup(targetValue) {
   if (!dragPayload || isBusy) return false;
   if (targetValue === "new") return dragPayload.keys.length > 0;
   const targetIndex = Number(targetValue);
@@ -648,6 +679,37 @@ function canDropToGroup(targetValue) {
     && groups[targetIndex]
     && targetIndex !== dragPayload.sourceGroup
     && dragPayload.keys.length > 0;
+}
+
+function canDropGroupToPosition(targetValue) {
+  if (!groupDragPayload || isBusy || targetValue === "new") return false;
+  const targetIndex = Number(targetValue);
+  return Number.isInteger(targetIndex)
+    && groups[targetIndex]
+    && targetIndex !== groupDragPayload.sourceGroup;
+}
+
+function handleGroupDragStart(event, index) {
+  if (isBusy || groups.length < 2) {
+    event.preventDefault();
+    return;
+  }
+  dragPayload = null;
+  groupDragPayload = {sourceGroup: index};
+  suppressGroupClick = true;
+  event.dataTransfer.effectAllowed = "move";
+  event.dataTransfer.setData("text/plain", groupLabel(index));
+  event.currentTarget.classList.add("dragging");
+}
+
+function handleGroupDragEnd() {
+  groupDragPayload = null;
+  for (const card of groupsPanel.querySelectorAll(".group-card.dragging, .drop-target, .reorder-target")) {
+    card.classList.remove("dragging", "drop-target", "reorder-target");
+  }
+  window.setTimeout(() => {
+    suppressGroupClick = false;
+  }, 50);
 }
 
 function renderEditor() {
@@ -769,6 +831,22 @@ async function moveSelectedPhoto() {
   await movePhotoKeysToGroup(selectedGroup, actionPhotoKeys(), targetGroup.value);
 }
 
+async function reorderGroup(sourceGroupIndex, targetIndex) {
+  if (!groups[sourceGroupIndex] || !groups[targetIndex] || sourceGroupIndex === targetIndex) return;
+  const selectedGroupRef = groups[selectedGroup] || null;
+  const movedGroup = groups[sourceGroupIndex];
+  pushUndo(`move ${groupLabel(sourceGroupIndex)}`);
+  groups.splice(sourceGroupIndex, 1);
+  groups.splice(targetIndex, 0, movedGroup);
+  const movedIndex = groups.indexOf(movedGroup);
+  selectedGroup = selectedGroupRef ? Math.max(0, groups.indexOf(selectedGroupRef)) : 0;
+  selectedPhotoIndex = Math.min(selectedPhotoIndex, Math.max(activeFiles().length - 1, 0));
+  groupDragPayload = null;
+  dragPayload = null;
+  refreshGroupsAfterEdit(`Moved ${groupName(movedGroup, movedIndex)}.`);
+  await previewCurrentPhoto();
+}
+
 async function movePhotoKeysToGroup(sourceGroupIndex, keys, targetValue) {
   const sourceGroup = groups[sourceGroupIndex];
   if (!sourceGroup || !keys.length) return;
@@ -817,6 +895,7 @@ async function movePhotoKeysToGroup(sourceGroupIndex, keys, targetValue) {
   selectedPhotoKeys = new Set(movedFiles.map(fileKey));
   selectedPhotoIndex = firstSelectedPhotoIndex(activeFiles());
   dragPayload = null;
+  groupDragPayload = null;
   refreshGroupsAfterEdit(`Moved ${moving.length} photo(s) to ${groupLabel(selectedGroup)}.`);
   await previewCurrentPhoto();
 }
@@ -846,6 +925,7 @@ async function removeSelectedPhoto() {
   groups = groups.filter((item) => item.files.length || item.manual);
   selectedPhotoKeys.clear();
   dragPayload = null;
+  groupDragPayload = null;
   selectedGroup = Math.min(selectedGroup, Math.max(groups.length - 1, 0));
   selectedPhotoIndex = Math.min(selectedPhotoIndex, Math.max(activeFiles().length - 1, 0));
   refreshGroupsAfterEdit(`Removed ${removedCount} photo(s) from the working set.`);
@@ -863,6 +943,7 @@ async function addManualGroup() {
   selectedPhotoIndex = 0;
   selectedPhotoKeys.clear();
   dragPayload = null;
+  groupDragPayload = null;
   refreshGroupsAfterEdit(`Added ${groupLabel(selectedGroup)}.`);
   await previewCurrentPhoto();
 }
@@ -891,6 +972,7 @@ async function undoLastEdit() {
   editSelectionMode = Boolean(snapshot.editSelectionMode);
   dragSelection = null;
   dragPayload = null;
+  groupDragPayload = null;
   photoStripKey = "";
   renderGroups();
   renderEditor();
@@ -1123,6 +1205,7 @@ function handlePhotoDragStart(event, index, file) {
     return;
   }
   const key = fileKey(file);
+  groupDragPayload = null;
   let keys = selectedPhotoKeys.has(key) ? activeSelectedKeys() : [key];
   if (!keys.length) keys = [key];
   selectedPhotoKeys = new Set(keys);
@@ -1140,8 +1223,8 @@ function handlePhotoDragEnd() {
   for (const button of photoStrip.querySelectorAll(".photo-thumb.dragging")) {
     button.classList.remove("dragging");
   }
-  for (const card of groupsPanel.querySelectorAll(".drop-target")) {
-    card.classList.remove("drop-target");
+  for (const card of groupsPanel.querySelectorAll(".drop-target, .reorder-target")) {
+    card.classList.remove("drop-target", "reorder-target");
   }
 }
 
