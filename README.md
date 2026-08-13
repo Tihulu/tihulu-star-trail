@@ -7,7 +7,7 @@ The grouping step uses OpenCV feature matching and a RANSAC homography check. In
 ## Features
 
 - Recursively scans an SD card or photo folder.
-- Opens a local cyberpunk dark web interface with `tihulu ui`.
+- Opens a local dark interface with `tihulu ui`.
 - Groups images by likely camera angle.
 - Writes a JSON manifest with group scores and source paths.
 - Creates star trails with a lighten blend, which is the classic pixel-wise maximum stack.
@@ -166,18 +166,6 @@ pip install -e ".[dev]"
 pytest
 ```
 
-## Publish To GitHub
-
-After creating a GitHub repository, push this project:
-
-```bash
-git init
-git add .
-git commit -m "Initial Tihulu star trail CLI"
-git branch -M main
-git remote add origin https://github.com/Tihulu/tihulu-star-trail.git
-git push -u origin main
-```
 
 The expected public repository URL is `https://github.com/Tihulu/tihulu-star-trail`.
 
