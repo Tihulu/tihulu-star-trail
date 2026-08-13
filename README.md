@@ -79,7 +79,7 @@ chmod +x Tihulu-Star-Trail-*-linux-x86_64.AppImage
 ./Tihulu-Star-Trail-*-linux-x86_64.AppImage
 ```
 
-The AppImage is self-contained and targets x86_64 Debian 12, Ubuntu 22.04, Pop!_OS 22.04, and newer compatible distributions. It includes Python, RAW support, and a native FFmpeg binary, so MP4 and timelapse exports work without installing Python or FFmpeg. Use the installer below when you want a managed virtual environment, command-line launcher, and application-menu entry.
+The AppImage is self-contained and targets x86_64 Debian 12, Ubuntu 22.04, Pop!_OS 22.04, and newer compatible distributions. It includes Python, RAW support, and a native FFmpeg binary, so MP4 and timelapse exports work without installing Python or FFmpeg. On systems without `libfuse2`, download the matching `-no-fuse.sh` launcher too, keep it next to the AppImage, and run that launcher instead. Use the installer below when you want a managed virtual environment, command-line launcher, and application-menu entry.
 
 One-line install:
 

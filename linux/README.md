@@ -11,6 +11,10 @@ chmod +x Tihulu-Star-Trail-*-linux-x86_64.AppImage
 ./Tihulu-Star-Trail-*-linux-x86_64.AppImage
 ```
 
+If your system does not have `libfuse2`, download the matching `-no-fuse.sh`
+release asset, keep it beside the AppImage, and run the launcher instead. It
+extracts and starts the AppImage without FUSE.
+
 To build the AppImage on Linux, install the project and PyInstaller, then run:
 
 ```sh
