@@ -1,0 +1,45 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tihulu-star-trail"
+version = "0.1.0"
+description = "Group night-sky photos by camera angle and build star trail images."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [
+  { name = "Tihulu Star Trail contributors" }
+]
+keywords = ["astrophotography", "star-trails", "opencv", "debian", "photography"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Environment :: Console",
+  "Intended Audience :: End Users/Desktop",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: POSIX :: Linux",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Multimedia :: Graphics",
+]
+dependencies = [
+  "numpy>=1.21",
+  "opencv-python-headless>=4.5",
+  "Pillow>=9.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=7",
+]
+
+[project.scripts]
+tihulu = "tihulu_star_trail.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
