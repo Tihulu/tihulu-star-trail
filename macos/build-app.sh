@@ -15,7 +15,6 @@ ICON_SOURCE=${TIHULU_ICON_SOURCE:-$PROJECT_DIR/src/tihulu_star_trail/assets/tihu
 CONTENTS="$APP_BUNDLE/Contents"
 MACOS_DIR="$CONTENTS/MacOS"
 RESOURCES_DIR="$CONTENTS/Resources"
-ICONSET_DIR="$RESOURCES_DIR/TihuluStarTrail.iconset"
 ICON_FILE="$RESOURCES_DIR/TihuluStarTrail.icns"
 LAUNCHER="$MACOS_DIR/tihulu-star-trail"
 LOG_DIR=${TIHULU_LOG_DIR:-$HOME/Library/Logs}
@@ -23,7 +22,7 @@ LOG_FILE="$LOG_DIR/Tihulu Star Trail.log"
 
 if [ ! -x "$EXECUTABLE" ]; then
   echo "Missing Tihulu executable: $EXECUTABLE" >&2
-  echo "Run scripts/install-macos.sh first." >&2
+  echo "Run macos/install.sh first." >&2
   exit 1
 fi
 if [ ! -f "$ICON_SOURCE" ]; then
@@ -31,28 +30,8 @@ if [ ! -f "$ICON_SOURCE" ]; then
   exit 1
 fi
 
-mkdir -p "$MACOS_DIR" "$RESOURCES_DIR" "$ICONSET_DIR" "$APP_PARENT"
-
-make_icon() {
-  size=$1
-  scale=$2
-  output=$3
-  pixels=$((size * scale))
-  sips -z "$pixels" "$pixels" "$ICON_SOURCE" --out "$ICONSET_DIR/$output" >/dev/null
-}
-
-make_icon 16 1 icon_16x16.png
-make_icon 16 2 icon_16x16@2x.png
-make_icon 32 1 icon_32x32.png
-make_icon 32 2 icon_32x32@2x.png
-make_icon 128 1 icon_128x128.png
-make_icon 128 2 icon_128x128@2x.png
-make_icon 256 1 icon_256x256.png
-make_icon 256 2 icon_256x256@2x.png
-make_icon 512 1 icon_512x512.png
-make_icon 512 2 icon_512x512@2x.png
-iconutil -c icns "$ICONSET_DIR" -o "$ICON_FILE"
-rm -rf "$ICONSET_DIR"
+mkdir -p "$MACOS_DIR" "$RESOURCES_DIR" "$APP_PARENT"
+sips -s format icns "$ICON_SOURCE" --out "$ICON_FILE" >/dev/null
 
 escaped_executable=$(printf '%s' "$EXECUTABLE" | sed 's/[\\"`$]/\\&/g')
 escaped_log_dir=$(printf '%s' "$LOG_DIR" | sed 's/[\\"`$]/\\&/g')

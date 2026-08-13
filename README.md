@@ -36,7 +36,7 @@ The grouping step uses OpenCV feature matching and a RANSAC homography check. In
 Homebrew is required. Install Tihulu and create `~/Applications/Tihulu Star Trail.app` with:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Tihulu/tihulu-star-trail/main/scripts/install-macos.sh | sh
+curl -fsSL https://raw.githubusercontent.com/Tihulu/tihulu-star-trail/main/macos/install.sh | sh
 ```
 
 The installer uses Homebrew `python@3.12`, `python-tk@3.12`, and `ffmpeg`, creates an isolated runtime under `~/Library/Application Support/Tihulu Star Trail`, installs the CLI at `~/.local/bin/tihulu`, and builds a normal macOS application bundle. No Terminal window is shown when the app is launched from Applications, and the installed app keeps working if the original cloned repository is moved or deleted.
@@ -44,13 +44,13 @@ The installer uses Homebrew `python@3.12`, `python-tk@3.12`, and `ffmpeg`, creat
 From a cloned repository, install or refresh the macOS app with:
 
 ```bash
-./scripts/install-macos.sh
+./macos/install.sh
 ```
 
 You can rebuild only the `.app` bundle after an existing installation with:
 
 ```bash
-./scripts/build-macos-app.sh
+./macos/build-app.sh
 ```
 
 The default install is user-local and does not require `sudo`. Set `TIHULU_APP_DIR=/Applications` if you intentionally want a system-wide application location and have permission to write there.

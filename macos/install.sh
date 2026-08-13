@@ -88,7 +88,7 @@ chmod 755 "$BIN_DIR/tihulu"
 TIHULU_INSTALL_DIR="$PROJECT_DIR" \
 TIHULU_APP_DIR="$APP_DIR" \
 TIHULU_EXECUTABLE="$VENV_DIR/bin/tihulu" \
-  "$PROJECT_DIR/scripts/build-macos-app.sh"
+  "$PROJECT_DIR/macos/build-app.sh"
 
 echo "Tihulu Star Trail is installed for macOS."
 echo "App: $APP_DIR/Tihulu Star Trail.app"
