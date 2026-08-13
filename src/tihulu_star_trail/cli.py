@@ -39,6 +39,7 @@ def build_parser() -> argparse.ArgumentParser:
     add_grouping_options(run)
     add_output_options(run)
     add_stacking_options(run)
+    add_timelapse_options(run, include_enable=True)
     run.set_defaults(func=run_command)
 
     group = subcommands.add_parser(
@@ -68,6 +69,44 @@ def build_parser() -> argparse.ArgumentParser:
         help="hide progress output",
     )
     trail.set_defaults(func=trail_command)
+
+    timelapse = subcommands.add_parser(
+        "timelapse",
+        help="render a timelapse video from photos or grouped output",
+    )
+    add_input_output(timelapse)
+    add_timelapse_options(timelapse, include_enable=False)
+    timelapse.add_argument(
+        "--min-frames",
+        type=int,
+        default=2,
+        help="minimum frames required before rendering a grouped timelapse",
+    )
+    timelapse.add_argument(
+        "--recursive",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="scan image folders recursively when rendering a single timelapse",
+    )
+    timelapse.add_argument(
+        "--quiet",
+        action="store_true",
+        help="hide progress output",
+    )
+    timelapse.set_defaults(func=timelapse_command)
+
+    ui = subcommands.add_parser(
+        "ui",
+        help="launch the local cyberpunk dark web interface",
+    )
+    ui.add_argument("--host", default="127.0.0.1", help="host address to bind")
+    ui.add_argument("--port", type=int, default=8765, help="port to bind")
+    ui.add_argument(
+        "--open",
+        action="store_true",
+        help="open the interface in the default browser",
+    )
+    ui.set_defaults(func=ui_command)
 
     return parser
 
@@ -139,9 +178,38 @@ def add_stacking_options(parser: argparse.ArgumentParser) -> None:
     )
 
 
+def add_timelapse_options(
+    parser: argparse.ArgumentParser,
+    include_enable: bool,
+) -> None:
+    if include_enable:
+        parser.add_argument(
+            "--timelapse",
+            action="store_true",
+            help="also render one timelapse video per detected group",
+        )
+    parser.add_argument(
+        "--fps",
+        type=float,
+        default=24.0,
+        help="timelapse frames per second",
+    )
+    parser.add_argument(
+        "--video-max-side",
+        type=int,
+        default=1920,
+        help="longest output video side; set 0 to keep original size",
+    )
+    parser.add_argument(
+        "--codec",
+        default="mp4v",
+        help="four-character OpenCV video codec, usually mp4v or XVID",
+    )
+
+
 def run_command(args: argparse.Namespace) -> int:
     from .grouping import build_angle_groups
-    from .stacker import render_group_trails
+    from .stacker import render_group_timelapses, render_group_trails
 
     progress = None if args.quiet else _progress
     paths = _load_images(args.input, recursive=args.recursive)
@@ -166,8 +234,20 @@ def run_command(args: argparse.Namespace) -> int:
         jpeg_quality=args.jpeg_quality,
         progress=progress,
     )
+    videos = []
+    if args.timelapse:
+        videos = render_group_timelapses(
+            groups,
+            args.output / "timelapses",
+            min_frames=args.min_frames,
+            fps=args.fps,
+            codec=args.codec,
+            max_side=_optional_max_side(args.video_max_side),
+            progress=progress,
+        )
     print(
-        f"Created {len(groups)} group(s), {len(rendered)} trail(s), and {manifest_path}",
+        f"Created {len(groups)} group(s), {len(rendered)} trail(s), "
+        f"{len(videos)} timelapse(s), and {manifest_path}",
         file=sys.stderr,
     )
     return 0
@@ -229,11 +309,59 @@ def trail_command(args: argparse.Namespace) -> int:
     return 0
 
 
+def timelapse_command(args: argparse.Namespace) -> int:
+    from .stacker import (
+        discover_group_dirs,
+        render_timelapse,
+        render_timelapses_from_group_dirs,
+    )
+
+    progress = None if args.quiet else _progress
+    if args.input.is_dir() and discover_group_dirs(args.input):
+        rendered = render_timelapses_from_group_dirs(
+            args.input,
+            args.output,
+            min_frames=args.min_frames,
+            fps=args.fps,
+            codec=args.codec,
+            max_side=_optional_max_side(args.video_max_side),
+            progress=progress,
+        )
+        print(f"Created {len(rendered)} timelapse(s) in {args.output}", file=sys.stderr)
+        return 0
+
+    paths = _load_images(args.input, recursive=args.recursive)
+    output_path = args.output
+    if output_path.suffix == "":
+        output_path = output_path / "timelapse.mp4"
+    render_timelapse(
+        paths,
+        output_path,
+        fps=args.fps,
+        codec=args.codec,
+        max_side=_optional_max_side(args.video_max_side),
+        progress=progress,
+    )
+    print(f"Created {output_path}", file=sys.stderr)
+    return 0
+
+
+def ui_command(args: argparse.Namespace) -> int:
+    from .ui import serve_ui
+
+    serve_ui(host=args.host, port=args.port, open_browser=args.open)
+    return 0
+
+
 def _load_images(path: Path, recursive: bool) -> list[Path]:
     paths = list_images(path, recursive=recursive)
     if not paths:
         raise ValueError(f"No supported images found in {path}")
     return paths
+
+
+def _optional_max_side(value: int) -> int | None:
+    return None if value <= 0 else value
 
 
 def _progress(message: str) -> None:
@@ -246,14 +374,18 @@ def _dependency_error(error: ModuleNotFoundError) -> str:
         "cv2": "python3-opencv",
         "numpy": "python3-numpy",
         "PIL": "python3-pillow",
+        "rawpy": "rawpy is installed with pip; run: pip install rawpy",
     }
     apt_name = apt_names.get(package)
-    if apt_name:
+    if apt_name and apt_name.startswith("python3-"):
         return (
             f"tihulu: missing dependency {package!r}. "
             f"On Debian/Pop!_OS, run: sudo apt install {apt_name}"
         )
+    if apt_name:
+        return f"tihulu: missing dependency {package!r}. {apt_name}"
     return f"tihulu: missing dependency {package!r}"
+
 
 if __name__ == "__main__":
     raise SystemExit(main())

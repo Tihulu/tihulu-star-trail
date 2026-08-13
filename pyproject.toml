@@ -30,6 +30,7 @@ dependencies = [
   "numpy>=1.21",
   "opencv-python-headless>=4.5",
   "Pillow>=9.0",
+  "rawpy>=0.19",
 ]
 
 [project.optional-dependencies]
@@ -42,4 +43,7 @@ tihulu = "tihulu_star_trail.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+tihulu_star_trail = ["web/*"]
 

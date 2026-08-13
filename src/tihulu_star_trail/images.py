@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Iterable
 
 
-SUPPORTED_EXTENSIONS = {
+STANDARD_EXTENSIONS = {
     ".jpg",
     ".jpeg",
     ".png",
@@ -15,11 +15,41 @@ SUPPORTED_EXTENSIONS = {
     ".webp",
 }
 
+RAW_EXTENSIONS = {
+    ".3fr",
+    ".arw",
+    ".cr2",
+    ".cr3",
+    ".dcr",
+    ".dng",
+    ".erf",
+    ".kdc",
+    ".mef",
+    ".mos",
+    ".mrw",
+    ".nef",
+    ".nrw",
+    ".orf",
+    ".pef",
+    ".raf",
+    ".raw",
+    ".rwl",
+    ".rw2",
+    ".srw",
+    ".x3f",
+}
+
+SUPPORTED_EXTENSIONS = STANDARD_EXTENSIONS | RAW_EXTENSIONS
+
 EXIF_DATE_TAGS = {
     306,  # DateTime
     36867,  # DateTimeOriginal
     36868,  # DateTimeDigitized
 }
+
+
+def is_raw_image(path: Path) -> bool:
+    return path.suffix.lower() in RAW_EXTENSIONS
 
 
 def is_supported_image(path: Path) -> bool:
@@ -77,6 +107,10 @@ def read_bgr(path: Path) -> np.ndarray:
     import cv2
     import numpy as np
 
+    path = Path(path)
+    if is_raw_image(path):
+        return _read_raw_bgr(path)
+
     data = np.fromfile(str(path), dtype=np.uint8)
     image = cv2.imdecode(data, cv2.IMREAD_COLOR)
     if image is None:
@@ -86,13 +120,9 @@ def read_bgr(path: Path) -> np.ndarray:
 
 def read_gray(path: Path) -> np.ndarray:
     import cv2
-    import numpy as np
 
-    data = np.fromfile(str(path), dtype=np.uint8)
-    image = cv2.imdecode(data, cv2.IMREAD_GRAYSCALE)
-    if image is None:
-        raise ValueError(f"Could not read image: {path}")
-    return image
+    image = read_bgr(path)
+    return cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
 
 def write_bgr(path: Path, image: np.ndarray, jpeg_quality: int = 95) -> None:
@@ -113,6 +143,28 @@ def write_bgr(path: Path, image: np.ndarray, jpeg_quality: int = 95) -> None:
     encoded.tofile(str(path))
 
 
+def _read_raw_bgr(path: Path) -> np.ndarray:
+    import cv2
+
+    try:
+        import rawpy
+    except ModuleNotFoundError as error:
+        raise ModuleNotFoundError(
+            "rawpy is required for RAW files. Install with: pip install rawpy"
+        ) from error
+
+    try:
+        with rawpy.imread(str(path)) as raw:
+            rgb = raw.postprocess(
+                use_camera_wb=True,
+                no_auto_bright=False,
+                output_bps=8,
+            )
+    except Exception as error:
+        raise ValueError(f"Could not decode RAW image {path}: {error}") from error
+    return cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
+
+
 def _parse_exif_datetime(value: object) -> datetime | None:
     if not value:
         return None
@@ -127,4 +179,3 @@ def _parse_exif_datetime(value: object) -> datetime | None:
         except ValueError:
             continue
     return None
-

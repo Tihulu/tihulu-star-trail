@@ -7,9 +7,12 @@ The grouping step uses OpenCV feature matching and a RANSAC homography check. In
 ## Features
 
 - Recursively scans an SD card or photo folder.
+- Opens a local cyberpunk dark web interface with `tihulu ui`.
 - Groups images by likely camera angle.
 - Writes a JSON manifest with group scores and source paths.
 - Creates star trails with a lighten blend, which is the classic pixel-wise maximum stack.
+- Renders MP4 timelapse videos from full folders or detected groups.
+- Supports JPEG, PNG, TIFF, WebP, and common RAW formats through `rawpy`.
 - Keeps the original photos untouched.
 - Can organize groups as symlinks, copies, hardlinks, or manifest-only output.
 
@@ -63,6 +66,12 @@ pip install -e .
 
 ## Quick Start
 
+Open the local interface:
+
+```bash
+tihulu ui
+```
+
 Run grouping and star-trail creation in one command:
 
 ```bash
@@ -104,6 +113,18 @@ Create a single star trail from one folder:
 tihulu trail ./one-angle-folder ./star-trail.jpg
 ```
 
+Create a timelapse video:
+
+```bash
+tihulu timelapse /media/$USER/SDCARD/DCIM ./timelapse.mp4 --fps 24
+```
+
+Create trails and one timelapse per detected group:
+
+```bash
+tihulu run /media/$USER/SDCARD/DCIM ./tihulu-output --timelapse
+```
+
 Copy files instead of creating symlinks:
 
 ```bash
@@ -125,6 +146,10 @@ tihulu run ./photos ./output --threshold 0.25
 ```
 
 The default threshold is `0.32`. Most real night-sky sets will need a little tuning because foreground detail, moonlight, clouds, lens distortion, and exposure settings all affect matching.
+
+## RAW Files
+
+RAW support uses `rawpy` and covers common camera formats such as `.cr2`, `.cr3`, `.nef`, `.arw`, `.dng`, `.orf`, `.rw2`, `.raf`, `.pef`, `.srw`, and `.x3f`. Tihulu decodes RAW files into 8-bit preview frames before grouping, stacking, or timelapse rendering.
 
 ## Development
 

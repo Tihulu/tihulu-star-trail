@@ -3,7 +3,7 @@ from pathlib import Path
 import numpy as np
 
 from tihulu_star_trail.images import read_bgr, write_bgr
-from tihulu_star_trail.stacker import stack_lighten
+from tihulu_star_trail.stacker import render_timelapse, stack_lighten
 
 
 def test_stack_lighten_uses_pixelwise_maximum(tmp_path: Path) -> None:
@@ -25,3 +25,19 @@ def test_stack_lighten_uses_pixelwise_maximum(tmp_path: Path) -> None:
     assert result[1, 1].tolist() == [40, 20, 80]
     assert result[2, 2].tolist() == [3, 200, 9]
 
+
+def test_render_timelapse_creates_video(tmp_path: Path) -> None:
+    paths = []
+    for index in range(3):
+        frame = np.zeros((16, 16, 3), dtype=np.uint8)
+        frame[:, :, 0] = index * 40
+        path = tmp_path / f"frame_{index}.png"
+        write_bgr(path, frame)
+        paths.append(path)
+
+    output_path = tmp_path / "timelapse.mp4"
+
+    render_timelapse(paths, output_path, fps=2, max_side=16)
+
+    assert output_path.exists()
+    assert output_path.stat().st_size > 0

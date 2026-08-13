@@ -21,7 +21,8 @@ jobs:
         run: |
           python3 -m venv --system-site-packages .venv
           . .venv/bin/activate
-          pip install -e . --no-deps
+          python -m pip install rawpy
+          python -m pip install -e . --no-deps
 
       - name: Run tests
         run: |

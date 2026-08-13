@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Tihulu Star Trail</title>
+    <link rel="stylesheet" href="/style.css">
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Tihulu Control Surface</p>
+          <h1>Star Trail Forge</h1>
+        </div>
+        <div class="status-chip" id="connectionStatus">LOCAL</div>
+      </header>
+
+      <section class="workspace" aria-label="Tihulu controls">
+        <form class="control-panel" id="jobForm">
+          <div class="mode-row" role="radiogroup" aria-label="Mode">
+            <label><input type="radio" name="action" value="run" checked><span>Full Run</span></label>
+            <label><input type="radio" name="action" value="group"><span>Group</span></label>
+            <label><input type="radio" name="action" value="trail"><span>Trail</span></label>
+            <label><input type="radio" name="action" value="timelapse"><span>Timelapse</span></label>
+          </div>
+
+          <div class="field-grid">
+            <label class="field wide">
+              <span>Input Path</span>
+              <input id="inputPath" name="input" type="text" placeholder="/media/$USER/SDCARD/DCIM" autocomplete="off" required>
+            </label>
+            <label class="field wide">
+              <span>Output Path</span>
+              <input id="outputPath" name="output" type="text" placeholder="./tihulu-output" autocomplete="off" required>
+            </label>
+          </div>
+
+          <div class="toggle-line">
+            <label><input id="recursive" type="checkbox" checked><span>Recursive scan</span></label>
+            <label><input id="includeTimelapse" type="checkbox"><span>Group timelapses</span></label>
+          </div>
+
+          <div class="field-grid compact">
+            <label class="field">
+              <span>Threshold</span>
+              <input id="threshold" type="number" min="0" max="1" step="0.01" value="0.32">
+            </label>
+            <label class="field">
+              <span>Min Matches</span>
+              <input id="minMatches" type="number" min="4" step="1" value="18">
+            </label>
+            <label class="field">
+              <span>Min Frames</span>
+              <input id="minFrames" type="number" min="1" step="1" value="2">
+            </label>
+            <label class="field">
+              <span>JPEG Quality</span>
+              <input id="jpegQuality" type="number" min="1" max="100" step="1" value="95">
+            </label>
+            <label class="field">
+              <span>FPS</span>
+              <input id="fps" type="number" min="1" step="1" value="24">
+            </label>
+            <label class="field">
+              <span>Video Max Side</span>
+              <input id="videoMaxSide" type="number" min="0" step="1" value="1920">
+            </label>
+            <label class="field">
+              <span>Feature Side</span>
+              <input id="maxSide" type="number" min="200" step="50" value="1000">
+            </label>
+            <label class="field">
+              <span>Link Mode</span>
+              <select id="linkMode">
+                <option value="symlink">Symlink</option>
+                <option value="copy">Copy</option>
+                <option value="hardlink">Hardlink</option>
+                <option value="none">Manifest</option>
+              </select>
+            </label>
+          </div>
+
+          <div class="action-row">
+            <button class="ghost" id="scanButton" type="button">Scan</button>
+            <button class="primary" type="submit">Run</button>
+          </div>
+        </form>
+
+        <section class="monitor-panel" aria-label="Job monitor">
+          <div class="meter-row">
+            <div>
+              <p class="eyebrow">Current Job</p>
+              <h2 id="jobTitle">Idle</h2>
+            </div>
+            <div class="status-chip" id="jobState">READY</div>
+          </div>
+          <pre id="logOutput" class="log-output">Awaiting input.</pre>
+          <div class="result-grid" id="resultGrid"></div>
+        </section>
+      </section>
+    </main>
+    <script src="/app.js"></script>
+  </body>
+</html>

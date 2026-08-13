@@ -66,6 +66,7 @@ if [ "$INSTALL_DEPS" -eq 1 ]; then
   pip install -e "$PROJECT_DIR"
 else
   pip install -e "$PROJECT_DIR" --no-deps
+  pip install rawpy
 fi
 
 mkdir -p "$BIN_DIR"
