@@ -15,6 +15,7 @@ const groupTitle = document.querySelector("#groupTitle");
 const statusChip = document.querySelector("#statusChip");
 const previewCanvas = document.querySelector("#previewCanvas");
 const downloadLink = document.querySelector("#downloadLink");
+const downloadNameInput = document.querySelector("#downloadName");
 const videoPlayerPanel = document.querySelector("#videoPlayerPanel");
 const videoPlayerTitle = document.querySelector("#videoPlayerTitle");
 const videoPreview = document.querySelector("#videoPreview");
@@ -50,6 +51,8 @@ let photoPreviewUrl = "";
 let photoPreviewFile = null;
 let canvasPreviewToken = 0;
 let currentOutputUrl = "";
+let currentDownloadBaseName = "tihulu-output";
+let currentDownloadExtension = "";
 let photoStripKey = "";
 let undoStack = [];
 let editSelectionMode = false;
@@ -112,19 +115,57 @@ function setBusy(busy) {
 
 function setDownload(url, filename) {
   clearDownload();
+  const parsed = splitDownloadFilename(filename);
   currentOutputUrl = url;
+  currentDownloadBaseName = parsed.baseName;
+  currentDownloadExtension = parsed.extension;
+  if (downloadNameInput && !downloadNameInput.value.trim()) {
+    downloadNameInput.placeholder = parsed.baseName;
+  }
   downloadLink.href = url;
-  downloadLink.download = filename;
   downloadLink.hidden = false;
+  updateDownloadFilename();
 }
 
 function clearDownload() {
   clearVideoPreview();
   if (currentOutputUrl) URL.revokeObjectURL(currentOutputUrl);
   currentOutputUrl = "";
+  currentDownloadExtension = "";
   downloadLink.removeAttribute("href");
   downloadLink.removeAttribute("download");
+  downloadLink.textContent = "Download";
+  downloadLink.removeAttribute("title");
   downloadLink.hidden = true;
+}
+
+function updateDownloadFilename() {
+  if (!currentOutputUrl) return;
+  const filename = `${downloadBaseName()}${currentDownloadExtension}`;
+  downloadLink.download = filename;
+  downloadLink.textContent = "Download";
+  downloadLink.title = `Download ${filename}`;
+}
+
+function downloadBaseName() {
+  const rawName = downloadNameInput?.value.trim() || currentDownloadBaseName || "tihulu-output";
+  const withoutOutputExtension = rawName.replace(/\.(jpe?g|png|webm|mp4)$/i, "");
+  const cleaned = withoutOutputExtension
+    .replace(/[\\/:*?"<>|]+/g, "-")
+    .replace(/[\u0000-\u001f\u007f]+/g, "")
+    .replace(/\s+/g, " ")
+    .replace(/^\.+/, "")
+    .trim();
+  return (cleaned || currentDownloadBaseName || "tihulu-output").slice(0, 120);
+}
+
+function splitDownloadFilename(filename) {
+  const fallback = filename || "tihulu-output";
+  const match = fallback.match(/^(.*?)(\.[^.]+)$/);
+  return {
+    baseName: (match?.[1] || fallback || "tihulu-output").trim() || "tihulu-output",
+    extension: match?.[2] || ""
+  };
 }
 
 function setVideoPreview(url, options, frameCount) {
@@ -361,6 +402,10 @@ timelapseButton.addEventListener("click", async () => {
 
 videoFormatSelect?.addEventListener("change", () => {
   updateVideoFormatSupport({announce: true});
+});
+
+downloadNameInput?.addEventListener("input", () => {
+  updateDownloadFilename();
 });
 
 restartVideoButton?.addEventListener("click", () => {

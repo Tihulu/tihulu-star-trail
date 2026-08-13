@@ -134,7 +134,13 @@
               <p class="eyebrow">Selected Group</p>
               <h2 id="groupTitle">No Photos</h2>
             </div>
-            <a class="download-link" id="downloadLink" hidden>Download</a>
+            <div class="download-tools">
+              <label class="field download-name-field">
+                <span>File Name</span>
+                <input id="downloadName" type="text" autocomplete="off" spellcheck="false" placeholder="tihulu-output">
+              </label>
+              <a class="download-link" id="downloadLink" hidden>Download</a>
+            </div>
           </div>
           <canvas id="previewCanvas" class="preview-canvas"></canvas>
           <section class="video-player" id="videoPlayerPanel" aria-label="Timelapse video player" hidden>
