@@ -3,6 +3,8 @@ const dropZone = document.querySelector("#dropZone");
 const analyzeButton = document.querySelector("#analyzeButton");
 const trailButton = document.querySelector("#trailButton");
 const timelapseButton = document.querySelector("#timelapseButton");
+const settingsInfoButton = document.querySelector("#settingsInfoButton");
+const settingsInfo = document.querySelector("#settingsInfo");
 const timeMetadataToggle = document.querySelector("#timeMetadata");
 const timeWindowInput = document.querySelector("#timeWindowHours") || document.querySelector("#timeWindowMinutes");
 const logOutput = document.querySelector("#logOutput");
@@ -112,6 +114,14 @@ function clearDownload() {
   downloadLink.removeAttribute("href");
   downloadLink.removeAttribute("download");
   downloadLink.hidden = true;
+}
+
+function setSettingsInfoOpen(open) {
+  if (!settingsInfo || !settingsInfoButton) return;
+  settingsInfo.hidden = !open;
+  settingsInfoButton.classList.toggle("active", open);
+  settingsInfoButton.setAttribute("aria-expanded", open ? "true" : "false");
+  settingsInfoButton.setAttribute("aria-label", open ? "Hide parameter guide" : "Show parameter guide");
 }
 
 function activeFiles() {
@@ -265,6 +275,10 @@ timelapseButton.addEventListener("click", async () => {
   }
 });
 
+settingsInfoButton?.addEventListener("click", () => {
+  setSettingsInfoOpen(Boolean(settingsInfo?.hidden));
+});
+
 previousPhotoButton.addEventListener("click", async () => {
   await selectPhoto(selectedPhotoIndex - 1);
 });
@@ -301,6 +315,14 @@ removeSelectedButton?.addEventListener("click", async () => {
 
 document.addEventListener("pointerup", () => {
   dragSelection = null;
+});
+
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && settingsInfo && !settingsInfo.hidden) {
+    event.preventDefault();
+    setSettingsInfoOpen(false);
+    settingsInfoButton?.focus();
+  }
 });
 
 undoButton.addEventListener("click", async () => {

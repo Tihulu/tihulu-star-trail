@@ -19,10 +19,57 @@
 
       <section class="workspace" aria-label="Tihulu web app">
         <section class="control-panel">
+          <button class="info-button" id="settingsInfoButton" type="button" aria-label="Show parameter guide" aria-expanded="false" aria-controls="settingsInfo">i</button>
           <label class="drop-zone" id="dropZone">
             <input id="fileInput" type="file" accept=".jpg,.jpeg,.png,.webp,.bmp,.gif,.avif,image/jpeg,image/png,image/webp,image/bmp,image/gif,image/avif" multiple>
             <span>Select Photos</span>
           </label>
+
+          <aside class="parameter-guide" id="settingsInfo" hidden>
+            <p class="eyebrow">Parameter Guide</p>
+            <dl>
+              <div>
+                <dt>Group Threshold</dt>
+                <dd>0.60-0.70 is loose, 0.72-0.82 is balanced, 0.90+ is strict and may split real sets.</dd>
+              </div>
+              <div>
+                <dt>Preview Side</dt>
+                <dd>64 is fast. 96-160 gives better grouping clues but uses more browser memory.</dd>
+              </div>
+              <div>
+                <dt>Output Max Side</dt>
+                <dd>1200-1800 is good for sharing. 2400-3840 is sharper, slower, and heavier.</dd>
+              </div>
+              <div>
+                <dt>Image Format</dt>
+                <dd>JPEG is smaller for sharing. PNG is lossless and larger, useful for editing later.</dd>
+              </div>
+              <div>
+                <dt>Image Quality</dt>
+                <dd>80-90 keeps files small. 92-100 preserves faint trails with larger JPEGs.</dd>
+              </div>
+              <div>
+                <dt>FPS</dt>
+                <dd>12-18 feels calm, 24 is cinematic, 30-60 is smoother but needs more frames.</dd>
+              </div>
+              <div>
+                <dt>Video Format</dt>
+                <dd>WebM is the safest browser export. MP4 is nicer for sharing when your browser supports it.</dd>
+              </div>
+              <div>
+                <dt>Video Quality Mbps</dt>
+                <dd>4-8 works for previews, 10-20 is cleaner, 25+ is best for 4K-style exports.</dd>
+              </div>
+              <div>
+                <dt>Time Metadata</dt>
+                <dd>When enabled, photos outside the time window are less likely to land in the same group.</dd>
+              </div>
+              <div>
+                <dt>Time Window Hours</dt>
+                <dd>2-6 separates short sessions. 8-24 keeps overnight shoots together across midnight.</dd>
+              </div>
+            </dl>
+          </aside>
 
           <div class="field-grid compact">
             <label class="field">
