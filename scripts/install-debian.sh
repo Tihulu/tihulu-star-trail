@@ -4,7 +4,7 @@ set -eu
 REPO_URL=${TIHULU_REPO_URL:-https://github.com/Tihulu/tihulu-star-trail.git}
 INSTALL_DIR=${TIHULU_INSTALL_DIR:-$HOME/tihulu-star-trail}
 BIN_DIR=${TIHULU_BIN_DIR:-$HOME/.local/bin}
-PYENV_VERSION=${TIHULU_PYTHON_VERSION:-3.11.9}
+PYENV_VERSION=${TIHULU_PYTHON_VERSION:-3.12.8}
 
 if command -v pyenv >/dev/null 2>&1; then
   if ! pyenv versions --bare | grep -qx "$PYENV_VERSION"; then
