@@ -23,6 +23,8 @@ curl -fsSL https://raw.githubusercontent.com/Tihulu/tihulu-star-trail/main/scrip
 
 The installer adds a launcher at `~/.local/bin/tihulu`. If that folder is not already on your `PATH`, run the command with the full path or add it to your shell profile.
 
+If `pyenv` is installed, the installer uses Python `3.11.9` from pyenv and installs Python dependencies with pip. If `pyenv` is not installed, it uses native Debian packages through apt. Pyenv itself may need system build dependencies the first time it compiles Python.
+
 From inside a cloned repository, you can run the same installer locally:
 
 ```bash
@@ -39,6 +41,16 @@ cd tihulu-star-trail
 python3 -m venv --system-site-packages .venv
 . .venv/bin/activate
 pip install -e . --no-deps
+```
+
+Optional pyenv setup:
+
+```bash
+pyenv install 3.11.9
+pyenv local 3.11.9
+python -m venv .venv
+. .venv/bin/activate
+pip install -e .
 ```
 
 If you prefer a normal Python virtual environment, this also works on many Debian/Pop!_OS machines:

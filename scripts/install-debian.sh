@@ -4,25 +4,51 @@ set -eu
 REPO_URL=${TIHULU_REPO_URL:-https://github.com/Tihulu/tihulu-star-trail.git}
 INSTALL_DIR=${TIHULU_INSTALL_DIR:-$HOME/tihulu-star-trail}
 BIN_DIR=${TIHULU_BIN_DIR:-$HOME/.local/bin}
+PYENV_VERSION=${TIHULU_PYTHON_VERSION:-3.11.9}
 
-if ! command -v apt-get >/dev/null 2>&1; then
-  echo "This installer expects a Debian-based system with apt-get." >&2
-  exit 1
+if command -v pyenv >/dev/null 2>&1; then
+  if ! pyenv versions --bare | grep -qx "$PYENV_VERSION"; then
+    pyenv install "$PYENV_VERSION"
+  fi
+  PYTHON_BIN=$(PYENV_VERSION="$PYENV_VERSION" pyenv which python)
+  INSTALL_DEPS=1
+else
+  if ! command -v apt-get >/dev/null 2>&1; then
+    echo "Install pyenv or run this on a Debian-based system with apt-get." >&2
+    exit 1
+  fi
+
+  if command -v sudo >/dev/null 2>&1; then
+    SUDO=sudo
+  elif [ "$(id -u)" -eq 0 ]; then
+    SUDO=
+  else
+    echo "This installer needs sudo for apt packages, or pyenv for a user-local install." >&2
+    exit 1
+  fi
+
+  $SUDO apt-get update
+  $SUDO apt-get install -y \
+    git \
+    python3 \
+    python3-venv \
+    python3-pip \
+    python3-opencv \
+    python3-numpy \
+    python3-pillow
+
+  PYTHON_BIN=python3
+  INSTALL_DEPS=0
 fi
-
-sudo apt-get update
-sudo apt-get install -y \
-  git \
-  python3 \
-  python3-venv \
-  python3-pip \
-  python3-opencv \
-  python3-numpy \
-  python3-pillow
 
 if [ -f "pyproject.toml" ] && [ -d "src/tihulu_star_trail" ]; then
   PROJECT_DIR=$(pwd)
 else
+  if ! command -v git >/dev/null 2>&1; then
+    echo "git is required to clone $REPO_URL." >&2
+    exit 1
+  fi
+
   if [ -d "$INSTALL_DIR/.git" ]; then
     git -C "$INSTALL_DIR" pull --ff-only
   elif [ -e "$INSTALL_DIR" ]; then
@@ -34,9 +60,13 @@ else
   PROJECT_DIR=$INSTALL_DIR
 fi
 
-python3 -m venv --system-site-packages "$PROJECT_DIR/.venv"
+"$PYTHON_BIN" -m venv --system-site-packages "$PROJECT_DIR/.venv"
 . "$PROJECT_DIR/.venv/bin/activate"
-pip install -e "$PROJECT_DIR" --no-deps
+if [ "$INSTALL_DEPS" -eq 1 ]; then
+  pip install -e "$PROJECT_DIR"
+else
+  pip install -e "$PROJECT_DIR" --no-deps
+fi
 
 mkdir -p "$BIN_DIR"
 {
