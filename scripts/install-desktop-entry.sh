@@ -38,6 +38,7 @@ Terminal=false
 Categories=Graphics;Photography;
 Keywords=star;trail;astrophotography;timelapse;raw;camera;
 StartupNotify=true
+StartupWMClass=TihuluStarTrail
 EOF
 
 chmod 644 "$DESKTOP_FILE"

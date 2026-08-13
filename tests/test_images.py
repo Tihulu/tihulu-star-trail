@@ -33,3 +33,15 @@ def test_list_images_rejects_unsupported_file(tmp_path: Path) -> None:
 
     with pytest.raises(ValueError):
         list_images(path)
+
+
+def test_list_images_omits_dotfiles_and_hidden_folders(tmp_path: Path) -> None:
+    (tmp_path / "IMG_0001.JPG").write_bytes(b"")
+    (tmp_path / "._IMG_0001.JPG").write_bytes(b"not a real jpeg sidecar")
+    hidden = tmp_path / ".hidden"
+    hidden.mkdir()
+    (hidden / "IMG_0002.JPG").write_bytes(b"")
+
+    names = [path.name for path in list_images(tmp_path)]
+
+    assert names == ["IMG_0001.JPG"]

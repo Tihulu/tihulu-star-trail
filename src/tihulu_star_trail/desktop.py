@@ -4,6 +4,7 @@ import queue
 import shutil
 import subprocess
 import threading
+from importlib import resources
 from pathlib import Path
 from typing import Any, Callable
 
@@ -41,7 +42,7 @@ def launch_desktop() -> None:
     from tkinter import messagebox
 
     try:
-        root = tk.Tk()
+        root = tk.Tk(className="TihuluStarTrail")
     except tk.TclError as error:
         raise RuntimeError(f"Could not open the desktop window: {error}") from error
 
@@ -65,6 +66,7 @@ class TihuluDesktopApp:
         self.controls: list[Any] = []
 
         root.title("Tihulu Star Trail")
+        self._set_window_icon()
         root.geometry("1180x760")
         root.minsize(980, 640)
         root.configure(bg=BG)
@@ -88,6 +90,16 @@ class TihuluDesktopApp:
 
         self._build_layout()
         self.root.after(100, self._drain_events)
+
+
+    def _set_window_icon(self) -> None:
+        try:
+            icon_path = resources.files("tihulu_star_trail").joinpath("assets/tihulu-star-trail.png")
+            icon = self.tk.PhotoImage(file=str(icon_path))
+            self.root.iconphoto(True, icon)
+            self._icon_image = icon
+        except Exception:
+            self._icon_image = None
 
     def _configure_style(self) -> None:
         style = self.ttk.Style(self.root)

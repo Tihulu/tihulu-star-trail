@@ -53,7 +53,11 @@ def is_raw_image(path: Path) -> bool:
 
 
 def is_supported_image(path: Path) -> bool:
-    return path.is_file() and path.suffix.lower() in SUPPORTED_EXTENSIONS
+    return (
+        path.is_file()
+        and not path.name.startswith(".")
+        and path.suffix.lower() in SUPPORTED_EXTENSIONS
+    )
 
 
 def list_images(root: Path, recursive: bool = True) -> list[Path]:
@@ -68,7 +72,11 @@ def list_images(root: Path, recursive: bool = True) -> list[Path]:
 
     iterator: Iterable[Path] = root.rglob("*") if recursive else root.iterdir()
     return sorted(
-        (path for path in iterator if is_supported_image(path)),
+        (
+            path
+            for path in iterator
+            if is_supported_image(path) and not _has_hidden_part(path, root)
+        ),
         key=lambda path: str(path).casefold(),
     )
 
@@ -179,3 +187,11 @@ def _parse_exif_datetime(value: object) -> datetime | None:
         except ValueError:
             continue
     return None
+
+
+def _has_hidden_part(path: Path, root: Path) -> bool:
+    try:
+        relative = path.relative_to(root)
+    except ValueError:
+        relative = path
+    return any(part.startswith(".") for part in relative.parts)

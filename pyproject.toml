@@ -45,5 +45,5 @@ tihulu = "tihulu_star_trail.cli:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-tihulu_star_trail = ["web/*"]
+tihulu_star_trail = ["web/*", "assets/*"]
 
