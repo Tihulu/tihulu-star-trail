@@ -17,7 +17,7 @@ Tihulu Star Trail provides native desktop installation for macOS and Debian-base
 - macOS 11 or newer.
 - An internet connection during the first installation.
 
-The release DMG contains a standalone application and does not require Python or Homebrew. The one-line command installs [Homebrew](https://brew.sh/) when it is missing, then uses it to install Python 3.12, Tk, FFmpeg, Git when needed, and all Python dependencies.
+The release DMG contains a standalone application and does not require Python, Homebrew, or a separate FFmpeg installation. It includes its own architecture-matched FFmpeg binary for MP4 and timelapse exports. The one-line command installs [Homebrew](https://brew.sh/) when it is missing, then uses it to install Python 3.12, Tk, FFmpeg, Git when needed, and all Python dependencies.
 
 ### DMG Installation
 
@@ -27,7 +27,7 @@ The release DMG contains a standalone application and does not require Python or
 4. Drag **Tihulu Star Trail** into the Applications shortcut.
 5. Open the app from Applications.
 
-Release builds are ad-hoc signed but not Apple-notarized. On the first launch, macOS may require you to Control-click **Tihulu Star Trail**, choose **Open**, and confirm the prompt.
+Release builds are ad-hoc signed but not Apple-notarized. On the first launch, macOS may require you to Control-click **Tihulu Star Trail**, choose **Open**, and confirm the prompt. MP4 and timelapse export works from the DMG without installing FFmpeg separately.
 
 The DMG application is standalone. The Homebrew-based method below remains useful when you also want the `tihulu` command-line launcher.
 
@@ -109,7 +109,7 @@ chmod +x Tihulu-Star-Trail-*-linux-x86_64.AppImage
 ./Tihulu-Star-Trail-*-linux-x86_64.AppImage
 ```
 
-The AppImage contains the application and Python dependencies. It does not modify the system or create an application-menu entry. Use the installation script below for managed desktop integration.
+The AppImage contains the application, Python dependencies, RAW support, and an x86_64 FFmpeg binary. MP4 and timelapse exports work without installing Python, Homebrew, or FFmpeg. It does not modify the system or create an application-menu entry. Use the installation script below for managed desktop integration.
 
 ### One-Line Installation
 
@@ -129,7 +129,7 @@ cd tihulu-star-trail
 ./scripts/install-debian.sh
 ```
 
-If pyenv is available, the installer uses Python 3.12.8 and installs Python dependencies with pip. Otherwise, it installs the available native Debian packages and uses a virtual environment with system site packages.
+If pyenv is available, the installer uses Python 3.12.8 and installs Python dependencies plus an embedded FFmpeg binary with pip. Otherwise, it installs the available native Debian packages, then adds RAW support and the embedded FFmpeg binary to its virtual environment. MP4 and timelapse exports do not depend on a separately installed FFmpeg.
 
 ### Debian Install Locations
 
@@ -166,7 +166,7 @@ You can also launch **Tihulu Star Trail** from the application menu. If `tihulu`
 
 - If Tk is missing, run `sudo apt install python3-tk tk-dev` and reinstall.
 - If the application cannot open output folders, install `xdg-utils`.
-- If video export is unavailable, install `ffmpeg`.
+- If video export is unavailable, rerun the installer; it verifies its bundled FFmpeg dependency before completing.
 - If a previous virtual environment uses a different Python installation, rerun the installer; it detects and rebuilds incompatible environments.
 
 ## Start the App

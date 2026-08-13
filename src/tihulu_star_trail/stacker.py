@@ -12,6 +12,50 @@ from .images import list_images, read_bgr, sort_images_by_time, write_bgr
 Progress = Callable[[str], None]
 
 
+def bundled_ffmpeg_executable() -> str | None:
+    """Return the FFmpeg executable bundled with a frozen desktop app, if any."""
+    try:
+        import imageio_ffmpeg
+    except ModuleNotFoundError:
+        return None
+
+    binaries_dir = Path(imageio_ffmpeg.__file__).resolve().parent / "binaries"
+    for candidate in sorted(binaries_dir.glob("ffmpeg-*")):
+        if candidate.is_file() and candidate.stat().st_mode & 0o111:
+            return str(candidate)
+    return None
+
+
+def ffmpeg_executable(require_bundled: bool = False) -> str | None:
+    """Prefer packaged FFmpeg and fall back to a system installation."""
+    bundled = bundled_ffmpeg_executable()
+    if bundled is not None:
+        return bundled
+    if require_bundled:
+        return None
+    return shutil.which("ffmpeg")
+
+
+def check_video_dependencies(require_bundled: bool = False) -> str:
+    """Verify that the FFmpeg used for bitrate-controlled video export works."""
+    executable = ffmpeg_executable(require_bundled=require_bundled)
+    if executable is None:
+        location = "packaged" if require_bundled else "packaged or system"
+        raise RuntimeError(f"No {location} FFmpeg executable is available.")
+    try:
+        result = subprocess.run(
+            [executable, "-hide_banner", "-encoders"],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except (OSError, subprocess.CalledProcessError) as error:
+        raise RuntimeError(f"FFmpeg could not start: {error}") from error
+    if "libx264" not in result.stdout:
+        raise RuntimeError(f"FFmpeg does not include the required libx264 encoder: {executable}")
+    return executable
+
+
 def stack_lighten(
     paths: Iterable[Path],
     output_path: Path,
@@ -81,9 +125,10 @@ def render_timelapse(
 
     first = read_bgr(ordered_paths[0])
     frame_size = _target_size(first.shape[1], first.shape[0], max_side=max_side)
+    ffmpeg = ffmpeg_executable()
     intermediate_path = (
         output_path.with_name(f".{output_path.stem}.recording{output_path.suffix}")
-        if bitrate_mbps and bitrate_mbps > 0 and shutil.which("ffmpeg")
+        if bitrate_mbps and bitrate_mbps > 0 and ffmpeg
         else output_path
     )
     writer = cv2.VideoWriter(
@@ -107,7 +152,13 @@ def render_timelapse(
         writer.release()
 
     if intermediate_path != output_path:
-        _apply_video_bitrate(intermediate_path, output_path, bitrate_mbps or 8.0, progress)
+        _apply_video_bitrate(
+            intermediate_path,
+            output_path,
+            bitrate_mbps or 8.0,
+            progress,
+            ffmpeg=ffmpeg,
+        )
 
     return output_path
 
@@ -310,10 +361,15 @@ def _apply_video_bitrate(
     output: Path,
     bitrate_mbps: float,
     progress: Progress | None,
+    ffmpeg: str | None = None,
 ) -> None:
     codec = "libvpx-vp9" if output.suffix.lower() == ".webm" else "libx264"
+    executable = ffmpeg or ffmpeg_executable()
+    if executable is None:
+        source.replace(output)
+        return
     command = [
-        "ffmpeg",
+        executable,
         "-y",
         "-loglevel",
         "error",
