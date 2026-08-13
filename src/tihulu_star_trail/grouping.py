@@ -8,9 +8,19 @@ from typing import Callable
 import cv2
 import numpy as np
 
+from .defaults import (
+    DEFAULT_GROUPING_THRESHOLD,
+    DEFAULT_MAX_SIDE,
+    DEFAULT_MIN_MATCHES,
+    DEFAULT_NFEATURES,
+)
 from .images import read_capture_time, read_gray, sort_images_by_time
 
 Progress = Callable[[str], None]
+
+MIN_INLIER_RATIO = 0.38
+MIN_POINT_SPREAD = 0.12
+MIN_GEOMETRY_QUALITY = 0.25
 
 
 @dataclass(frozen=True)
@@ -28,6 +38,8 @@ class MatchScore:
     good_matches: int
     inliers: int
     inlier_ratio: float
+    point_spread: float = 0.0
+    geometry_quality: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -54,8 +66,8 @@ class AngleGroup:
 
 def extract_signature(
     path: Path,
-    max_side: int = 1000,
-    nfeatures: int = 2500,
+    max_side: int = DEFAULT_MAX_SIDE,
+    nfeatures: int = DEFAULT_NFEATURES,
 ) -> ImageSignature:
     gray = read_gray(path)
     height, width = gray.shape[:2]
@@ -64,6 +76,7 @@ def extract_signature(
         scale = max_side / float(longest)
         new_size = (max(1, int(width * scale)), max(1, int(height * scale)))
         gray = cv2.resize(gray, new_size, interpolation=cv2.INTER_AREA)
+        height, width = gray.shape[:2]
 
     gray = _prepare_for_features(gray)
     orb = cv2.ORB_create(nfeatures=nfeatures, fastThreshold=7)
@@ -85,7 +98,7 @@ def extract_signature(
 def score_signatures(
     first: ImageSignature,
     second: ImageSignature,
-    min_matches: int = 18,
+    min_matches: int = DEFAULT_MIN_MATCHES,
     ratio: float = 0.75,
 ) -> MatchScore:
     if first.descriptors is None or second.descriptors is None:
@@ -94,17 +107,15 @@ def score_signatures(
         return MatchScore(0.0, 0, 0, 0.0)
 
     matcher = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=False)
-    raw_matches = matcher.knnMatch(first.descriptors, second.descriptors, k=2)
-    good_matches = [
-        match
-        for pair in raw_matches
-        if len(pair) == 2
-        for match, neighbor in [pair]
-        if match.distance < ratio * neighbor.distance
-    ]
+    good_matches = _mutual_ratio_matches(
+        matcher,
+        first.descriptors,
+        second.descriptors,
+        ratio,
+    )
 
     if len(good_matches) < 4:
-        score = min(len(good_matches) / float(max(min_matches, 1)), 1.0) * 0.1
+        score = min(len(good_matches) / float(max(min_matches, 1)), 1.0) * 0.05
         return MatchScore(score, len(good_matches), 0, 0.0)
 
     source_points = np.float32(
@@ -114,40 +125,58 @@ def score_signatures(
         [second.points[match.trainIdx] for match in good_matches]
     ).reshape(-1, 1, 2)
 
-    _homography, mask = cv2.findHomography(
+    homography, mask = cv2.findHomography(
         source_points,
         target_points,
         cv2.RANSAC,
         5.0,
     )
-    if mask is None:
+    if mask is None or homography is None:
         return MatchScore(0.0, len(good_matches), 0, 0.0)
 
-    inliers = int(mask.sum())
+    inlier_mask = mask.ravel().astype(bool)
+    inliers = int(inlier_mask.sum())
     inlier_ratio = inliers / float(max(len(good_matches), 1))
-    inlier_target = max(min_matches * 3, 1)
+    source_inliers = source_points.reshape(-1, 2)[inlier_mask]
+    target_inliers = target_points.reshape(-1, 2)[inlier_mask]
+    point_spread = min(
+        _point_spread(source_inliers, first.width, first.height),
+        _point_spread(target_inliers, second.width, second.height),
+    )
+    geometry_quality = _homography_quality(homography, first, second)
+    inlier_target = max(min_matches * 2, 1)
     inlier_coverage = min(inliers / float(inlier_target), 1.0)
-    feature_base = max(min(len(first.points), len(second.points)), 1)
-    match_density = min(len(good_matches) / float(feature_base) * 3.0, 1.0)
 
-    score = (0.55 * inlier_ratio) + (0.35 * inlier_coverage) + (0.10 * match_density)
+    score = (
+        (0.40 * inlier_ratio)
+        + (0.30 * inlier_coverage)
+        + (0.20 * point_spread)
+        + (0.10 * geometry_quality)
+    )
+    if len(good_matches) < min_matches:
+        score *= len(good_matches) / float(max(min_matches, 1))
     if inliers < min_matches:
-        score *= inliers / float(max(min_matches, 1))
+        score *= (inliers / float(max(min_matches, 1))) ** 2
+    score = _soft_gate(score, inlier_ratio, MIN_INLIER_RATIO)
+    score = _soft_gate(score, point_spread, MIN_POINT_SPREAD)
+    score = _soft_gate(score, geometry_quality, MIN_GEOMETRY_QUALITY)
 
     return MatchScore(
         score=max(0.0, min(score, 1.0)),
         good_matches=len(good_matches),
         inliers=inliers,
         inlier_ratio=inlier_ratio,
+        point_spread=point_spread,
+        geometry_quality=geometry_quality,
     )
 
 
 def build_angle_groups(
     paths: list[Path],
-    threshold: float = 0.32,
-    min_matches: int = 18,
-    max_side: int = 1000,
-    nfeatures: int = 2500,
+    threshold: float = DEFAULT_GROUPING_THRESHOLD,
+    min_matches: int = DEFAULT_MIN_MATCHES,
+    max_side: int = DEFAULT_MAX_SIDE,
+    nfeatures: int = DEFAULT_NFEATURES,
     progress: Progress | None = None,
 ) -> list[AngleGroup]:
     ordered_paths = sort_images_by_time(paths)
@@ -180,12 +209,14 @@ def build_angle_groups(
                 signature,
                 min_matches=min_matches,
             )
-            candidate_score = (
-                representative_score
-                if representative_score.score >= last_score.score
-                else last_score
-            )
-            candidate_label = "representative" if candidate_score is representative_score else "latest"
+            candidate_score = representative_score
+            candidate_label = "representative"
+            if (
+                last_score.score > representative_score.score
+                and representative_score.score >= threshold * 0.72
+            ):
+                candidate_score = last_score
+                candidate_label = "latest"
             if candidate_score.score > best_score.score:
                 best_group = group
                 best_score = candidate_score
@@ -226,8 +257,109 @@ def _new_group(signature: ImageSignature, captured_at: datetime | None) -> Angle
     )
 
 
+def _mutual_ratio_matches(
+    matcher: cv2.BFMatcher,
+    first_descriptors: np.ndarray,
+    second_descriptors: np.ndarray,
+    ratio: float,
+) -> list[cv2.DMatch]:
+    forward = _ratio_matches(matcher, first_descriptors, second_descriptors, ratio)
+    reverse = _ratio_matches(matcher, second_descriptors, first_descriptors, ratio)
+    reverse_pairs = {(match.trainIdx, match.queryIdx) for match in reverse}
+    return [
+        match
+        for match in forward
+        if (match.queryIdx, match.trainIdx) in reverse_pairs
+    ]
+
+
+def _ratio_matches(
+    matcher: cv2.BFMatcher,
+    query_descriptors: np.ndarray,
+    train_descriptors: np.ndarray,
+    ratio: float,
+) -> list[cv2.DMatch]:
+    raw_matches = matcher.knnMatch(query_descriptors, train_descriptors, k=2)
+    return [
+        match
+        for pair in raw_matches
+        if len(pair) == 2
+        for match, neighbor in [pair]
+        if match.distance < ratio * neighbor.distance
+    ]
+
+
+def _point_spread(points: np.ndarray, width: int, height: int) -> float:
+    if len(points) < 2:
+        return 0.0
+    min_x, min_y = points.min(axis=0)
+    max_x, max_y = points.max(axis=0)
+    span_x = max(0.0, float(max_x - min_x) / float(max(width, 1)))
+    span_y = max(0.0, float(max_y - min_y) / float(max(height, 1)))
+    diagonal = min(
+        ((span_x * span_x) + (span_y * span_y)) ** 0.5 / (2.0 ** 0.5),
+        1.0,
+    )
+    area = min(max(span_x * span_y, 0.0) ** 0.5, 1.0)
+    return max(0.0, min((0.70 * diagonal) + (0.30 * area), 1.0))
+
+
+def _homography_quality(
+    homography: np.ndarray,
+    first: ImageSignature,
+    second: ImageSignature,
+) -> float:
+    corners = np.float32(
+        [
+            [0.0, 0.0],
+            [float(max(first.width - 1, 1)), 0.0],
+            [float(max(first.width - 1, 1)), float(max(first.height - 1, 1))],
+            [0.0, float(max(first.height - 1, 1))],
+        ]
+    ).reshape(-1, 1, 2)
+    projected = cv2.perspectiveTransform(corners, homography).reshape(-1, 2)
+    if not np.isfinite(projected).all():
+        return 0.0
+
+    projected_area = _polygon_area(projected)
+    source_area = float(max(first.width * first.height, 1))
+    if projected_area <= 1.0:
+        return 0.0
+
+    scale = projected_area / source_area
+    scale_score = 1.0 - min(abs(float(np.log2(max(scale, 1e-6)))) / 3.0, 1.0)
+    min_x, min_y = projected.min(axis=0)
+    max_x, max_y = projected.max(axis=0)
+    bbox_area = max(float(max_x - min_x), 0.0) * max(float(max_y - min_y), 0.0)
+    target_area = float(max(second.width * second.height, 1))
+    overlap_width = max(
+        0.0,
+        min(float(max_x), float(second.width)) - max(float(min_x), 0.0),
+    )
+    overlap_height = max(
+        0.0,
+        min(float(max_y), float(second.height)) - max(float(min_y), 0.0),
+    )
+    overlap = (overlap_width * overlap_height) / max(min(bbox_area, target_area), 1.0)
+    overlap_score = min(max(overlap, 0.0) * 1.35, 1.0)
+    return max(0.0, min((0.65 * scale_score) + (0.35 * overlap_score), 1.0))
+
+
+def _polygon_area(points: np.ndarray) -> float:
+    x = points[:, 0]
+    y = points[:, 1]
+    return abs(
+        float(np.dot(x, np.roll(y, -1)) - np.dot(y, np.roll(x, -1))) * 0.5
+    )
+
+
+def _soft_gate(score: float, value: float, minimum: float) -> float:
+    if value >= minimum:
+        return score
+    return score * max(value, 0.0) / max(minimum, 1e-6)
+
+
 def _prepare_for_features(gray: np.ndarray) -> np.ndarray:
     clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
     enhanced = clahe.apply(gray)
     return cv2.GaussianBlur(enhanced, (3, 3), 0)
-

@@ -8,6 +8,7 @@ from importlib import resources
 from pathlib import Path
 from typing import Any, Callable
 
+from .defaults import DEFAULT_GROUPING_THRESHOLD, DEFAULT_MAX_SIDE, DEFAULT_MIN_MATCHES
 from .engine import execute_action, scan_images
 
 TK_HINT = "Native desktop app requires Tk. On Debian/Pop!_OS, run: sudo apt install python3-tk tk-dev"
@@ -77,13 +78,13 @@ class TihuluDesktopApp:
         self.output_path = tk.StringVar(value=str(Path.home() / "tihulu-output"))
         self.recursive = tk.BooleanVar(value=True)
         self.include_timelapse = tk.BooleanVar(value=False)
-        self.threshold = tk.StringVar(value="0.32")
-        self.min_matches = tk.StringVar(value="18")
+        self.threshold = tk.StringVar(value=str(DEFAULT_GROUPING_THRESHOLD))
+        self.min_matches = tk.StringVar(value=str(DEFAULT_MIN_MATCHES))
         self.min_frames = tk.StringVar(value="2")
         self.jpeg_quality = tk.StringVar(value="95")
         self.fps = tk.StringVar(value="24")
         self.video_max_side = tk.StringVar(value="1920")
-        self.max_side = tk.StringVar(value="1000")
+        self.max_side = tk.StringVar(value=str(DEFAULT_MAX_SIDE))
         self.link_mode = tk.StringVar(value="symlink")
         self.state = tk.StringVar(value="READY")
         self.result = tk.StringVar(value="No result yet")

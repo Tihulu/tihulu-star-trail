@@ -3,6 +3,12 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Callable
 
+from .defaults import (
+    DEFAULT_GROUPING_THRESHOLD,
+    DEFAULT_MAX_SIDE,
+    DEFAULT_MIN_MATCHES,
+    DEFAULT_NFEATURES,
+)
 from .grouping import build_angle_groups
 from .images import list_images
 from .organizer import materialize_groups
@@ -37,10 +43,10 @@ def execute_action(payload: dict[str, Any], progress: Progress | None = None) ->
     recursive = bool(payload.get("recursive", True))
     min_frames = int(payload.get("min_frames", 2))
     jpeg_quality = int(payload.get("jpeg_quality", 95))
-    threshold = float(payload.get("threshold", 0.32))
-    min_matches = int(payload.get("min_matches", 18))
-    max_side = int(payload.get("max_side", 1000))
-    nfeatures = int(payload.get("nfeatures", 2500))
+    threshold = float(payload.get("threshold", DEFAULT_GROUPING_THRESHOLD))
+    min_matches = int(payload.get("min_matches", DEFAULT_MIN_MATCHES))
+    max_side = int(payload.get("max_side", DEFAULT_MAX_SIDE))
+    nfeatures = int(payload.get("nfeatures", DEFAULT_NFEATURES))
     fps = float(payload.get("fps", 24.0))
     video_max_side = _optional_max_side(int(payload.get("video_max_side", 1920)))
     codec = str(payload.get("codec", "mp4v"))

@@ -162,16 +162,16 @@ tihulu run /media/$USER/SDCARD/DCIM ./tihulu-output --link-mode copy
 If photos from different angles are being mixed together, make the grouping stricter:
 
 ```bash
-tihulu run ./photos ./output --threshold 0.45
+tihulu run ./photos ./output --threshold 0.55 --min-matches 24
 ```
 
 If photos from the same angle are being split into too many groups, make it more permissive:
 
 ```bash
-tihulu run ./photos ./output --threshold 0.25
+tihulu run ./photos ./output --threshold 0.35
 ```
 
-The default threshold is `0.32`. Most real night-sky sets will need a little tuning because foreground detail, moonlight, clouds, lens distortion, and exposure settings all affect matching.
+The default Linux/desktop threshold is `0.42`. The Linux grouping engine now uses mutual ORB feature matches, RANSAC homography inliers, inlier spread across the frame, and homography sanity checks before accepting a same-angle match. The GitHub Pages browser app uses a separate browser-only scorer with a default threshold of `0.72`; it compares luminance structure, edge layout, color balance, contrast, and aspect ratio. In both apps, higher threshold values are stricter. Most real night-sky sets may still need a little tuning because foreground detail, moonlight, clouds, lens distortion, and exposure settings all affect matching.
 
 ## RAW Files
 
@@ -179,7 +179,7 @@ RAW support uses `rawpy` and covers common camera formats such as `.cr2`, `.cr3`
 
 ## GitHub Pages
 
-The static web app lives in `docs/` and is deployed by `.github/workflows/pages.yml` using GitHub Actions. The hosted app is configured for `https://tihulu.github.io/tihulu-star-trail/`. Browser exports include PNG/JPEG image quality controls plus WebM/MP4 video type and bitrate controls. The web app also includes a manual group editor for browsing photos, moving photos between detected groups, creating a new group, and removing photos from the current working set. MP4 export depends on browser MediaRecorder support; WebM is the safest browser fallback.
+The static web app lives in `docs/` and is deployed by `.github/workflows/pages.yml` using GitHub Actions. The hosted app is configured for `https://tihulu.github.io/tihulu-star-trail/`. Browser exports include PNG/JPEG image quality controls plus WebM/MP4 video type and bitrate controls. The web app also includes stricter browser-side grouping plus a manual group editor for browsing photos, moving photos between detected groups, creating a new group, and removing photos from the current working set. MP4 export depends on browser MediaRecorder support; WebM is the safest browser fallback.
 
 ## Development
 

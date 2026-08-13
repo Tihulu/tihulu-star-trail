@@ -4,6 +4,12 @@ import argparse
 import sys
 from pathlib import Path
 
+from .defaults import (
+    DEFAULT_GROUPING_THRESHOLD,
+    DEFAULT_MAX_SIDE,
+    DEFAULT_MIN_MATCHES,
+    DEFAULT_NFEATURES,
+)
 from .images import list_images
 from .organizer import materialize_groups
 
@@ -131,25 +137,25 @@ def add_grouping_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--threshold",
         type=float,
-        default=0.32,
+        default=DEFAULT_GROUPING_THRESHOLD,
         help="same-angle threshold from 0 to 1; higher is stricter",
     )
     parser.add_argument(
         "--min-matches",
         type=int,
-        default=18,
+        default=DEFAULT_MIN_MATCHES,
         help="minimum geometric feature matches expected for same-angle images",
     )
     parser.add_argument(
         "--max-side",
         type=int,
-        default=1000,
+        default=DEFAULT_MAX_SIDE,
         help="longest image side used for grouping analysis",
     )
     parser.add_argument(
         "--nfeatures",
         type=int,
-        default=2500,
+        default=DEFAULT_NFEATURES,
         help="maximum ORB features to detect per image",
     )
     parser.add_argument(

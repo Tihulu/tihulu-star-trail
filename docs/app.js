@@ -29,6 +29,8 @@ let photoPreviewUrl = "";
 let photoPreviewFile = null;
 let canvasPreviewToken = 0;
 
+const SIGNATURE_CELLS = 12;
+
 function log(lines) {
   logOutput.textContent = Array.isArray(lines) ? lines.join("\n") : String(lines);
   logOutput.scrollTop = logOutput.scrollHeight;
@@ -203,17 +205,22 @@ async function groupPhotos(inputFiles, options) {
     let best = null;
     let bestScore = -1;
     for (const group of detected) {
-      const score = similarity(item.signature.hash, group.representative.hash);
+      const representativeScore = similarity(item.signature, group.representative);
+      const latestScore = similarity(item.signature, group.lastSignature);
+      const score = latestScore > representativeScore && representativeScore >= options.threshold * 0.72
+        ? latestScore
+        : representativeScore;
       if (score > bestScore) {
         best = group;
         bestScore = score;
       }
     }
     if (!best || bestScore < options.threshold) {
-      detected.push({representative: item.signature, files: [item.file], scores: [1]});
+      detected.push({representative: item.signature, lastSignature: item.signature, files: [item.file], scores: [1]});
     } else {
       best.files.push(item.file);
       best.scores.push(bestScore);
+      best.lastSignature = item.signature;
     }
   }
   return detected;
@@ -221,6 +228,7 @@ async function groupPhotos(inputFiles, options) {
 
 async function imageSignature(file, side) {
   const bitmap = await decode(file);
+  const aspect = bitmap.width / Math.max(bitmap.height, 1);
   const canvas = createWorkCanvas(side, side);
   const ctx = canvas.getContext("2d", {willReadFrequently: true});
   ctx.fillStyle = "black";
@@ -228,38 +236,155 @@ async function imageSignature(file, side) {
   const target = contain(bitmap.width, bitmap.height, side);
   ctx.drawImage(bitmap, target.x, target.y, target.width, target.height);
   const pixels = ctx.getImageData(0, 0, side, side).data;
-  const cells = 8;
-  const cellSide = side / cells;
-  const values = [];
-  for (let y = 0; y < cells; y += 1) {
-    for (let x = 0; x < cells; x += 1) {
-      let total = 0;
+  const pixelCount = side * side;
+  const lumaGrid = new Float32Array(pixelCount);
+  let lumaTotal = 0;
+  let lumaSquares = 0;
+  let redTotal = 0;
+  let greenTotal = 0;
+  let blueTotal = 0;
+
+  for (let index = 0; index < pixelCount; index += 1) {
+    const offset = index * 4;
+    const red = pixels[offset];
+    const green = pixels[offset + 1];
+    const blue = pixels[offset + 2];
+    const luma = 0.2126 * red + 0.7152 * green + 0.0722 * blue;
+    lumaGrid[index] = luma;
+    lumaTotal += luma;
+    lumaSquares += luma * luma;
+    redTotal += red;
+    greenTotal += green;
+    blueTotal += blue;
+  }
+
+  const meanLuma = lumaTotal / Math.max(pixelCount, 1);
+  const contrast = Math.sqrt(Math.max(lumaSquares / Math.max(pixelCount, 1) - meanLuma * meanLuma, 0));
+  const luma = [];
+  const edges = [];
+  const colors = [];
+  const cells = Math.min(SIGNATURE_CELLS, Math.max(4, Math.floor(side / 4)));
+
+  for (let cellY = 0; cellY < cells; cellY += 1) {
+    for (let cellX = 0; cellX < cells; cellX += 1) {
+      const sx = Math.floor(cellX * side / cells);
+      const sy = Math.floor(cellY * side / cells);
+      const ex = Math.floor((cellX + 1) * side / cells);
+      const ey = Math.floor((cellY + 1) * side / cells);
+      let totalLuma = 0;
+      let totalEdge = 0;
+      let totalRed = 0;
+      let totalGreen = 0;
+      let totalBlue = 0;
       let count = 0;
-      const sx = Math.floor(x * cellSide);
-      const sy = Math.floor(y * cellSide);
-      const ex = Math.floor((x + 1) * cellSide);
-      const ey = Math.floor((y + 1) * cellSide);
       for (let py = sy; py < ey; py += 1) {
         for (let px = sx; px < ex; px += 1) {
-          const offset = (py * side + px) * 4;
-          total += 0.2126 * pixels[offset] + 0.7152 * pixels[offset + 1] + 0.0722 * pixels[offset + 2];
+          const index = py * side + px;
+          const offset = index * 4;
+          const current = lumaGrid[index];
+          const right = px + 1 < side ? lumaGrid[index + 1] : current;
+          const down = py + 1 < side ? lumaGrid[index + side] : current;
+          totalLuma += current;
+          totalEdge += Math.min(Math.hypot(right - current, down - current) / 255, 1);
+          totalRed += pixels[offset];
+          totalGreen += pixels[offset + 1];
+          totalBlue += pixels[offset + 2];
           count += 1;
         }
       }
-      values.push(total / Math.max(count, 1));
+      const safeCount = Math.max(count, 1);
+      const colorTotal = totalRed + totalGreen + totalBlue;
+      luma.push((totalLuma / safeCount - meanLuma) / Math.max(contrast, 1));
+      edges.push(totalEdge / safeCount);
+      if (colorTotal > safeCount * 8) {
+        colors.push(totalRed / colorTotal, totalGreen / colorTotal, totalBlue / colorTotal);
+      } else {
+        colors.push(0, 0, 0);
+      }
     }
   }
-  const average = values.reduce((sum, value) => sum + value, 0) / values.length;
+
   bitmap.close?.();
-  return {hash: values.map((value) => value >= average ? 1 : 0)};
+  return {
+    luma: centeredUnitVector(luma),
+    edges: centeredUnitVector(edges),
+    colors,
+    meanColor: [
+      redTotal / Math.max(pixelCount * 255, 1),
+      greenTotal / Math.max(pixelCount * 255, 1),
+      blueTotal / Math.max(pixelCount * 255, 1)
+    ],
+    meanLuma: meanLuma / 255,
+    contrast: contrast / 255,
+    aspect
+  };
 }
 
 function similarity(first, second) {
-  let same = 0;
+  const structureScore = vectorSimilarity(first.luma, second.luma);
+  const edgeScore = vectorSimilarity(first.edges, second.edges);
+  const colorScore = distanceSimilarity(first.colors, second.colors, 0.28);
+  const meanColorScore = distanceSimilarity(first.meanColor, second.meanColor, 0.35);
+  const brightnessScore = scalarSimilarity(first.meanLuma, second.meanLuma, 0.30);
+  const contrastScore = scalarSimilarity(first.contrast, second.contrast, 0.22);
+  const aspectScore = scalarSimilarity(Math.log(first.aspect), Math.log(second.aspect), Math.log(1.5));
+  let score = (
+    (0.40 * structureScore)
+    + (0.22 * edgeScore)
+    + (0.17 * colorScore)
+    + (0.08 * meanColorScore)
+    + (0.05 * brightnessScore)
+    + (0.05 * contrastScore)
+    + (0.03 * aspectScore)
+  );
+  score = softGate(score, structureScore, 0.52);
+  score = softGate(score, edgeScore, 0.42);
+  score = softGate(score, colorScore, 0.35);
+  score = softGate(score, meanColorScore, 0.35);
+  return clamp(score, 0, 1);
+}
+
+function centeredUnitVector(values) {
+  if (!values.length) return [];
+  const mean = values.reduce((sum, value) => sum + value, 0) / values.length;
+  const centered = values.map((value) => value - mean);
+  const norm = Math.sqrt(centered.reduce((sum, value) => sum + value * value, 0));
+  if (norm < 0.000001) return centered.map(() => 0);
+  return centered.map((value) => value / norm);
+}
+
+function vectorSimilarity(first, second) {
+  if (!first.length || first.length !== second.length) return 0;
+  let dot = 0;
+  let firstNorm = 0;
+  let secondNorm = 0;
   for (let index = 0; index < first.length; index += 1) {
-    if (first[index] === second[index]) same += 1;
+    dot += first[index] * second[index];
+    firstNorm += first[index] * first[index];
+    secondNorm += second[index] * second[index];
   }
-  return same / first.length;
+  if (firstNorm < 0.000001 || secondNorm < 0.000001) return 0;
+  return clamp((dot / Math.sqrt(firstNorm * secondNorm) + 1) / 2, 0, 1);
+}
+
+function distanceSimilarity(first, second, scale) {
+  if (!first.length || first.length !== second.length) return 0;
+  let total = 0;
+  for (let index = 0; index < first.length; index += 1) {
+    const delta = first[index] - second[index];
+    total += delta * delta;
+  }
+  const rms = Math.sqrt(total / first.length);
+  return clamp(1 - rms / Math.max(scale, 0.000001), 0, 1);
+}
+
+function scalarSimilarity(first, second, tolerance) {
+  return clamp(1 - Math.abs(first - second) / Math.max(tolerance, 0.000001), 0, 1);
+}
+
+function softGate(score, value, minimum) {
+  if (value >= minimum) return score;
+  return score * Math.max(value, 0) / Math.max(minimum, 0.000001);
 }
 
 async function renderGroups() {
