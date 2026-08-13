@@ -2,6 +2,8 @@
 
 **Hosted Web App:** https://tihulu.github.io/tihulu-star-trail/
 
+**OS Installation Guide:** [docs/INSTALLATION.md](docs/INSTALLATION.md)
+
 Tihulu Star Trail is an open source native desktop and command-line application for macOS and Debian-based Linux systems, including Pop!_OS. It scans a folder or SD card, groups photos that look like they were taken from the same camera angle, and creates a star trail image for each group.
 
 The grouping step uses OpenCV feature matching and a RANSAC homography check. In plain English: it looks for visual points that agree with each other geometrically, then groups images by how likely they are to share the same viewpoint.
@@ -33,6 +35,8 @@ The grouping step uses OpenCV feature matching and a RANSAC homography check. In
 
 ## Install On macOS
 
+For requirements, install locations, verification, and troubleshooting, see the [complete macOS installation documentation](docs/INSTALLATION.md#macos).
+
 Homebrew is required. Install Tihulu and create `~/Applications/Tihulu Star Trail.app` with:
 
 ```bash
@@ -56,6 +60,8 @@ You can rebuild only the `.app` bundle after an existing installation with:
 The default install is user-local and does not require `sudo`. Set `TIHULU_APP_DIR=/Applications` if you intentionally want a system-wide application location and have permission to write there.
 
 ## Install On Debian Or Pop!_OS
+
+For requirements, install locations, verification, and troubleshooting, see the [complete Debian/Pop!_OS installation documentation](docs/INSTALLATION.md#debian-and-pop_os).
 
 One-line install:
 
