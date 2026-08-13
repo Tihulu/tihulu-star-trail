@@ -91,7 +91,10 @@
             <p class="eyebrow">Manual Review</p>
             <h2 id="editorTitle">Photo Editor</h2>
           </div>
-          <div class="photo-counter" id="photoCounter">0 / 0</div>
+          <div class="editor-head-actions">
+            <button class="ghost" id="undoButton" type="button">Undo</button>
+            <div class="photo-counter" id="photoCounter">0 / 0</div>
+          </div>
         </div>
         <div class="editor-body">
           <figure class="photo-stage">
@@ -104,14 +107,29 @@
               <button class="ghost" id="nextPhotoButton" type="button">Next</button>
             </div>
             <label class="field">
+              <span>Group Name</span>
+              <input id="groupNameInput" type="text" autocomplete="off" spellcheck="false">
+            </label>
+            <div class="action-row tight split-row">
+              <button class="ghost" id="renameGroupButton" type="button">Rename</button>
+              <button class="ghost" id="addGroupButton" type="button">Add Group</button>
+            </div>
+            <label class="field">
               <span>Move To</span>
               <select id="targetGroup"></select>
             </label>
-            <div class="action-row tight">
+            <div class="action-row tight split-row">
               <button class="ghost" id="movePhotoButton" type="button">Move Photo</button>
               <button class="ghost danger" id="removePhotoButton" type="button">Remove</button>
             </div>
           </div>
+        </div>
+        <div class="review-window" aria-label="Selected group photos">
+          <div class="review-window-head">
+            <p class="eyebrow">Group Photos</p>
+            <span id="filmstripCount">0 photo(s)</span>
+          </div>
+          <div class="photo-strip" id="photoStrip"></div>
         </div>
       </section>
 

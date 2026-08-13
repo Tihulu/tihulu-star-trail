@@ -13,7 +13,7 @@ The grouping step uses OpenCV feature matching and a RANSAC homography check. In
 - Keeps the local browser interface available with `tihulu ui`.
 - Includes a static GitHub Pages web app for browser-readable photo sets.
 - Groups images by likely camera angle.
-- Lets the hosted web app browse photos inside a group, move photos between groups, create a new group, or remove photos from the working set.
+- Lets the hosted web app browse every photo inside a group, jump by thumbnail, use arrow-key navigation, rename groups, add groups, undo manual edits, move photos between groups, create a new group, or remove photos from the working set.
 - Writes a JSON manifest with group scores and source paths.
 - Creates star trails with a lighten blend, which is the classic pixel-wise maximum stack.
 - Renders MP4 timelapse videos from full folders or detected groups.
@@ -179,7 +179,7 @@ RAW support uses `rawpy` and covers common camera formats such as `.cr2`, `.cr3`
 
 ## GitHub Pages
 
-The static web app lives in `docs/` and is deployed by `.github/workflows/pages.yml` using GitHub Actions. The hosted app is configured for `https://tihulu.github.io/tihulu-star-trail/`. Browser exports include PNG/JPEG image quality controls plus WebM/MP4 video type and bitrate controls. The web app also includes stricter browser-side grouping plus a manual group editor for browsing photos, moving photos between detected groups, creating a new group, and removing photos from the current working set. MP4 export depends on browser MediaRecorder support; WebM is the safest browser fallback.
+The static web app lives in `docs/` and is deployed by `.github/workflows/pages.yml` using GitHub Actions. The hosted app is configured for `https://tihulu.github.io/tihulu-star-trail/`. Browser exports include PNG/JPEG image quality controls plus WebM/MP4 video type and bitrate controls. The web app also includes stricter browser-side grouping plus a manual group editor with a scrollable thumbnail browser, arrow-key photo navigation, undo, group renaming, manual group creation, moving photos between detected groups, and removing photos from the current working set. MP4 export depends on browser MediaRecorder support; WebM is the safest browser fallback.
 
 ## Development
 

@@ -19,6 +19,12 @@ const nextPhotoButton = document.querySelector("#nextPhotoButton");
 const targetGroup = document.querySelector("#targetGroup");
 const movePhotoButton = document.querySelector("#movePhotoButton");
 const removePhotoButton = document.querySelector("#removePhotoButton");
+const undoButton = document.querySelector("#undoButton");
+const groupNameInput = document.querySelector("#groupNameInput");
+const renameGroupButton = document.querySelector("#renameGroupButton");
+const addGroupButton = document.querySelector("#addGroupButton");
+const filmstripCount = document.querySelector("#filmstripCount");
+const photoStrip = document.querySelector("#photoStrip");
 
 let files = [];
 let groups = [];
@@ -28,8 +34,11 @@ let isBusy = false;
 let photoPreviewUrl = "";
 let photoPreviewFile = null;
 let canvasPreviewToken = 0;
+let photoStripKey = "";
+let undoStack = [];
 
 const SIGNATURE_CELLS = 12;
+const MAX_UNDO_STATES = 50;
 
 function log(lines) {
   logOutput.textContent = Array.isArray(lines) ? lines.join("\n") : String(lines);
@@ -96,6 +105,8 @@ function chooseFiles(nextFiles) {
   groups = [];
   selectedGroup = 0;
   selectedPhotoIndex = 0;
+  undoStack = [];
+  photoStripKey = "";
   clearDownload();
   groupsPanel.innerHTML = "";
   groupTitle.textContent = files.length ? `${files.length} photo(s)` : "No Photos";
@@ -132,6 +143,8 @@ analyzeButton.addEventListener("click", async () => {
     groups = await groupPhotos(files, settings());
     selectedGroup = 0;
     selectedPhotoIndex = 0;
+    undoStack = [];
+    photoStripKey = "";
     renderGroups();
     renderEditor();
     await previewCurrentPhoto();
@@ -193,6 +206,42 @@ removePhotoButton.addEventListener("click", async () => {
   await removeSelectedPhoto();
 });
 
+undoButton.addEventListener("click", async () => {
+  await undoLastEdit();
+});
+
+addGroupButton.addEventListener("click", async () => {
+  await addManualGroup();
+});
+
+renameGroupButton.addEventListener("click", () => {
+  renameSelectedGroup();
+});
+
+groupNameInput.addEventListener("keydown", (event) => {
+  if (event.key === "Enter") {
+    event.preventDefault();
+    renameSelectedGroup();
+  }
+});
+
+document.addEventListener("keydown", (event) => {
+  if (isBusy || isTypingTarget(event.target)) return;
+  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "z" && !event.shiftKey) {
+    event.preventDefault();
+    void undoLastEdit();
+    return;
+  }
+  if (event.key === "ArrowLeft" && activeFiles().length > 1) {
+    event.preventDefault();
+    void selectPhoto(selectedPhotoIndex - 1);
+  }
+  if (event.key === "ArrowRight" && activeFiles().length > 1) {
+    event.preventDefault();
+    void selectPhoto(selectedPhotoIndex + 1);
+  }
+});
+
 async function groupPhotos(inputFiles, options) {
   const signatures = [];
   for (const [index, file] of inputFiles.entries()) {
@@ -216,7 +265,7 @@ async function groupPhotos(inputFiles, options) {
       }
     }
     if (!best || bestScore < options.threshold) {
-      detected.push({representative: item.signature, lastSignature: item.signature, files: [item.file], scores: [1]});
+      detected.push({name: defaultGroupName(detected.length), representative: item.signature, lastSignature: item.signature, files: [item.file], scores: [1]});
     } else {
       best.files.push(item.file);
       best.scores.push(bestScore);
@@ -392,17 +441,26 @@ async function renderGroups() {
   for (const [index, group] of groups.entries()) {
     const card = document.createElement("button");
     card.type = "button";
+    card.disabled = isBusy;
     card.className = `group-card${index === selectedGroup ? " active" : ""}`;
-    const score = groupScore(group);
-    card.innerHTML = `<strong>${groupLabel(index)}</strong><span>${group.files.length} frame(s) / ${score.toFixed(2)}</span><div class="thumb-strip"></div>`;
-    const strip = card.querySelector(".thumb-strip");
+
+    const title = document.createElement("strong");
+    title.textContent = groupLabel(index);
+    const meta = document.createElement("span");
+    meta.textContent = groupSummary(group);
+    const strip = document.createElement("div");
+    strip.className = "thumb-strip";
+
     for (const file of group.files.slice(0, 4)) {
       const image = document.createElement("img");
       image.alt = "";
       image.src = URL.createObjectURL(file);
       image.addEventListener("load", () => URL.revokeObjectURL(image.src), {once: true});
+      image.addEventListener("error", () => URL.revokeObjectURL(image.src), {once: true});
       strip.appendChild(image);
     }
+
+    card.append(title, meta, strip);
     card.addEventListener("click", async () => {
       selectedGroup = index;
       selectedPhotoIndex = 0;
@@ -417,17 +475,24 @@ async function renderGroups() {
 function renderEditor() {
   const selected = activeFiles();
   const group = activeGroup();
+  const hasGroup = Boolean(group);
   const hasPhoto = selected.length > 0;
   if (selectedPhotoIndex >= selected.length) selectedPhotoIndex = Math.max(0, selected.length - 1);
 
   editorTitle.textContent = group ? groupLabel(selectedGroup) : files.length ? "All Photos" : "Photo Editor";
   photoCounter.textContent = hasPhoto ? `${selectedPhotoIndex + 1} / ${selected.length}` : "0 / 0";
   photoName.textContent = hasPhoto ? selected[selectedPhotoIndex].name : "Select photos.";
+  groupNameInput.value = hasGroup ? groupLabel(selectedGroup) : "";
   setPhotoPreview(hasPhoto ? selected[selectedPhotoIndex] : null);
+  renderPhotoStrip();
 
   previousPhotoButton.disabled = isBusy || selected.length < 2;
   nextPhotoButton.disabled = isBusy || selected.length < 2;
   removePhotoButton.disabled = isBusy || !hasPhoto;
+  undoButton.disabled = isBusy || !undoStack.length;
+  addGroupButton.disabled = isBusy || !files.length;
+  renameGroupButton.disabled = isBusy || !hasGroup;
+  groupNameInput.disabled = isBusy || !hasGroup;
 
   targetGroup.innerHTML = "";
   if (groups.length) {
@@ -445,7 +510,7 @@ function renderEditor() {
   } else {
     const option = document.createElement("option");
     option.value = "";
-    option.textContent = "Analyze First";
+    option.textContent = files.length ? "Create Group First" : "Analyze First";
     targetGroup.appendChild(option);
   }
   movePhotoButton.disabled = isBusy || !hasPhoto || !groups.length || !targetGroup.value;
@@ -488,13 +553,14 @@ async function moveSelectedPhoto() {
   const targetIndexBeforeMove = targetValue === "new" ? groups.length : Number(targetValue);
   if (targetValue !== "new" && (!groups[targetIndexBeforeMove] || targetIndexBeforeMove === selectedGroup)) return;
 
+  pushUndo(`move ${file.name}`);
   const sourceIndex = selectedPhotoIndex;
   const [movedFile] = sourceGroup.files.splice(sourceIndex, 1);
   const [movedScore] = sourceGroup.scores.splice(sourceIndex, 1);
 
   let targetIndex = targetIndexBeforeMove;
   if (targetValue === "new") {
-    groups.push({representative: null, files: [movedFile], scores: [movedScore ?? 1], manual: true});
+    groups.push(createManualGroup({files: [movedFile], scores: [movedScore ?? 1]}));
   } else {
     groups[targetIndex].files.push(movedFile);
     groups[targetIndex].scores.push(movedScore ?? 1);
@@ -517,6 +583,7 @@ async function removeSelectedPhoto() {
   const file = selected[selectedPhotoIndex];
   if (!file) return;
 
+  pushUndo(`remove ${file.name}`);
   files = files.filter((item) => item !== file);
   if (groups.length) {
     const group = activeGroup();
@@ -531,7 +598,81 @@ async function removeSelectedPhoto() {
   await previewCurrentPhoto();
 }
 
+async function addManualGroup() {
+  if (!files.length) return log("Select photos first.");
+  pushUndo("add group");
+  if (!groups.length) {
+    groups.push(createManualGroup({files: files.slice(), scores: files.map(() => 1)}));
+  }
+  groups.push(createManualGroup());
+  selectedGroup = groups.length - 1;
+  selectedPhotoIndex = 0;
+  refreshGroupsAfterEdit(`Added ${groupLabel(selectedGroup)}.`);
+  await previewCurrentPhoto();
+}
+
+function renameSelectedGroup() {
+  const group = activeGroup();
+  if (!group) return;
+  const nextName = groupNameInput.value.trim();
+  if (!nextName) return log("Group name cannot be empty.");
+  const duplicate = groups.some((item, index) => index !== selectedGroup && groupName(item, index).toLowerCase() === nextName.toLowerCase());
+  if (duplicate) return log(`Group name already exists: ${nextName}`);
+  if (nextName === groupLabel(selectedGroup)) return;
+  pushUndo(`rename ${groupLabel(selectedGroup)}`);
+  group.name = nextName;
+  refreshGroupsAfterEdit(`Renamed group to ${nextName}.`);
+}
+
+async function undoLastEdit() {
+  const snapshot = undoStack.pop();
+  if (!snapshot) return;
+  files = snapshot.files;
+  groups = snapshot.groups;
+  selectedGroup = snapshot.selectedGroup;
+  selectedPhotoIndex = snapshot.selectedPhotoIndex;
+  photoStripKey = "";
+  renderGroups();
+  renderEditor();
+  log(`Undid ${snapshot.label}.`);
+  await previewCurrentPhoto();
+}
+
+function pushUndo(label) {
+  undoStack.push({
+    label,
+    files: files.slice(),
+    groups: groups.map(cloneGroup),
+    selectedGroup,
+    selectedPhotoIndex
+  });
+  if (undoStack.length > MAX_UNDO_STATES) undoStack.shift();
+}
+
+function cloneGroup(group) {
+  return {
+    name: group.name,
+    representative: group.representative,
+    lastSignature: group.lastSignature,
+    files: group.files.slice(),
+    scores: group.scores.slice(),
+    manual: group.manual
+  };
+}
+
+function createManualGroup({files: groupFiles = [], scores = []} = {}) {
+  return {
+    name: nextGroupName(),
+    representative: null,
+    lastSignature: null,
+    files: groupFiles,
+    scores: scores.length ? scores : groupFiles.map(() => 1),
+    manual: true
+  };
+}
+
 function refreshGroupsAfterEdit(message) {
+  photoStripKey = "";
   renderGroups();
   renderEditor();
   log(message);
@@ -560,11 +701,96 @@ async function previewCurrentPhoto() {
 }
 
 function groupLabel(index) {
+  return groupName(groups[index], index);
+}
+
+function groupName(group, index) {
+  return group?.name || defaultGroupName(index);
+}
+
+function defaultGroupName(index) {
   return `group_${String(index + 1).padStart(3, "0")}`;
 }
 
+function nextGroupName() {
+  const usedNames = new Set(groups.map((group, index) => groupName(group, index).toLowerCase()));
+  let index = 0;
+  while (usedNames.has(defaultGroupName(index).toLowerCase())) index += 1;
+  return defaultGroupName(index);
+}
+
 function groupScore(group) {
-  return group.scores.length ? group.scores.reduce((sum, value) => sum + value, 0) / group.scores.length : 1;
+  return group.scores.length ? group.scores.reduce((sum, value) => sum + value, 0) / group.scores.length : null;
+}
+
+function groupSummary(group) {
+  const score = groupScore(group);
+  return `${group.files.length} frame(s) / ${score === null ? "manual" : score.toFixed(2)}`;
+}
+
+function renderPhotoStrip() {
+  const selected = activeFiles();
+  filmstripCount.textContent = `${selected.length} photo(s)`;
+  const key = `${selectedGroup}:${groupLabel(selectedGroup)}:${selected.map(fileKey).join("|")}`;
+  if (key === photoStripKey) {
+    syncPhotoStripSelection();
+    return;
+  }
+
+  photoStripKey = key;
+  photoStrip.innerHTML = "";
+  if (!selected.length) {
+    const empty = document.createElement("p");
+    empty.className = "empty-strip";
+    empty.textContent = files.length ? "This group is empty." : "Select photos.";
+    photoStrip.appendChild(empty);
+    return;
+  }
+
+  for (const [index, file] of selected.entries()) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.disabled = isBusy;
+    button.className = "photo-thumb";
+    button.dataset.index = String(index);
+
+    const image = document.createElement("img");
+    image.alt = "";
+    image.src = URL.createObjectURL(file);
+    image.addEventListener("load", () => URL.revokeObjectURL(image.src), {once: true});
+    image.addEventListener("error", () => URL.revokeObjectURL(image.src), {once: true});
+
+    const label = document.createElement("span");
+    label.textContent = file.name;
+    button.append(image, label);
+    button.addEventListener("click", async () => {
+      await selectPhoto(index);
+    });
+    photoStrip.appendChild(button);
+  }
+  syncPhotoStripSelection();
+}
+
+function syncPhotoStripSelection() {
+  const buttons = photoStrip.querySelectorAll(".photo-thumb");
+  for (const button of buttons) {
+    button.classList.toggle("active", Number(button.dataset.index) === selectedPhotoIndex);
+  }
+  const activeButton = photoStrip.querySelector(".photo-thumb.active");
+  activeButton?.scrollIntoView({block: "nearest", inline: "nearest"});
+}
+
+function fileKey(file) {
+  return `${file.name}:${file.size}:${file.lastModified}`;
+}
+
+function isTypingTarget(target) {
+  return target instanceof HTMLElement && (
+    target.isContentEditable
+    || target.tagName === "INPUT"
+    || target.tagName === "SELECT"
+    || target.tagName === "TEXTAREA"
+  );
 }
 
 async function renderTrail(selected, options) {
