@@ -1970,10 +1970,10 @@ Threshold
 0.30–0.38 is loose, 0.40–0.50 is balanced (0.42 default), and 0.55+ is strict and may split real sets.
 
 Min Matches
-12–18 accepts more possible matches, 18–30 is balanced, and 35+ is strict. The default is 18.
+How many recognizable details two photos must share before automatic analysis puts them in the same group. 18 is the balanced default. Lower (12–17) if one shoot is being split apart; raise (25–35+) if unrelated photos are being mixed together.
 
 Min Frames
-2 exports every usable pair. 8–20 avoids accidental tiny groups; 30+ is useful for longer timelapses.
+The minimum number of photos required to keep and export a detected group. 2 keeps every matching pair. Use 8–20 to ignore accidental tiny groups; 30+ is useful when you only want longer timelapses. Groups below this number are skipped.
 
 Feature Side
 640 is fast, 1000 is the balanced default, and 1400–2000 can find finer grouping clues but uses more memory.
