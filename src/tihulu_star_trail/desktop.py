@@ -983,28 +983,31 @@ class TihuluDesktopApp:
         guide = """PARAMETER GUIDE
 
 Threshold
-Higher values make grouping stricter. Lower values keep more visually similar photos together.
+0.30–0.38 is loose, 0.40–0.50 is balanced (0.42 default), and 0.55+ is strict and may split real sets.
 
 Min Matches
-The minimum number of matching visual features used to accept the same camera angle.
+12–18 accepts more possible matches, 18–30 is balanced, and 35+ is strict. The default is 18.
 
 Min Frames
-Groups smaller than this are skipped during trail and timelapse export.
+2 exports every usable pair. 8–20 avoids accidental tiny groups; 30+ is useful for longer timelapses.
 
 Feature Side
-Working resolution for grouping analysis. Larger values can improve matching but use more memory.
+640 is fast, 1000 is the balanced default, and 1400–2000 can find finer grouping clues but uses more memory.
 
 Time Window Hours
-Photos taken within this many hours are more likely to stay in the same group when Time Metadata is enabled.
+2–6 separates short sessions. 8–24 can keep an overnight shoot together across midnight when Time Metadata is on.
 
 Output Max Side
-Limits the longest edge of trail images. Enable Keep Original Size to export at source dimensions without output resizing.
+1200–1800 is good for sharing. 2400–3840 is sharper but slower and larger. Keep Original Size exports at source dimensions with no resizing or stretching.
 
 Image Format / JPEG Quality
-PNG is lossless and larger. JPEG is smaller; higher JPEG quality preserves more faint detail.
+JPEG is smaller for sharing; PNG is lossless and larger for later editing. JPEG 80–90 keeps files small; 92–100 preserves faint trails with larger files.
 
-Video Format / Video Max Side / FPS
-MP4 is broadly compatible. WebM uses VP9 when the installed OpenCV build supports it. FPS controls playback speed; Video Max Side limits resolution. Enable Keep Original Video Size to make the timelapse at the source photo dimensions without video resizing.
+Video Format / Video Max Side
+MP4 is broadly compatible. WebM uses VP9 when the installed OpenCV build supports it. Video Max Side 1080–1920 is good for sharing; 2160–3840 is sharper but slower. Keep Original Video Size uses source photo dimensions with no video resizing.
+
+FPS / Video Quality Mbps
+12–18 FPS feels calm, 24 is cinematic, and 30–60 is smoother but needs more frames. 4–8 Mbps works for previews, 10–20 is cleaner, and 25+ is best for 4K-style exports.
 
 Manual Review
 Analyze Groups first. You can rename, add, drag-reorder, move or remove photos, select cards with Ctrl/Command or Shift, drag selected photo cards onto another group, navigate with arrow keys, and undo up to 50 edits. Export Edited writes only non-empty groups.
