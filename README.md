@@ -50,7 +50,7 @@ For requirements, install locations, verification, and troubleshooting, see the 
 Download the DMG for your Mac from the [latest GitHub Release](https://github.com/Tihulu/tihulu-star-trail/releases/latest):
 
 - Apple Silicon (`M1`, `M2`, `M3`, `M4`, or newer): download the `arm64.dmg` file.
-- Intel Mac: download the `x86_64.dmg` file.
+- Intel Mac: use the preserved [v0.1.7 x86_64 DMG](https://github.com/Tihulu/tihulu-star-trail/releases/download/v0.1.7/Tihulu-Star-Trail-0.1.7-macOS-x86_64.dmg) and its [archived setup guide](archive/v0.1.7/README.md). Beginning with v0.2.0, new native macOS releases target Apple Silicon only; v0.1.7 remains the last packaged Intel release.
 
 Open the DMG and drag **Tihulu Star Trail** into the Applications shortcut. The DMG includes Python, RAW support, and a native FFmpeg binary, so MP4 and timelapse exports work without Homebrew, Python, or a separate FFmpeg installation. Release builds are ad-hoc signed but not Apple-notarized, so the first launch may require Control-clicking the app and choosing **Open**.
 

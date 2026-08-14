@@ -20,11 +20,10 @@ CI validates cache limits, stale-job rejection, backend selection, CPU fallback,
 - Confirm Auto reports the packaged backend when OpenCV exposes one, otherwise CPU.
 - Confirm Activity Monitor memory stabilizes during repeated group switching and drops after thumbnails are disabled or the app closes.
 
-## Intel macOS
+## Intel macOS legacy package
 
-- Install the x86_64 DMG on an Intel Mac with no Homebrew/Python additions.
-- Repeat the common checks at the 1080×700 minimum window and a larger desktop size.
-- Confirm unavailable GPU mode falls back to CPU without a crash.
+- v0.1.7 is the final packaged Intel release and remains available unchanged from the archive and GitHub Releases.
+- New release-candidate testing begins with v0.2.0 on Apple Silicon and Linux only.
 
 ## Linux GPU and CPU-only systems
 
