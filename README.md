@@ -274,6 +274,4 @@ pytest
 
 The expected public repository URL is `https://github.com/Tihulu/tihulu-star-trail`.
 
-## License
 
-MIT License. See [LICENSE](LICENSE).
