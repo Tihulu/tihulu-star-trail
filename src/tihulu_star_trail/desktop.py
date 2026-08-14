@@ -85,6 +85,7 @@ class TihuluDesktopApp:
         self.last_outputs: list[Path] = []
         self._drag_group_index: int | None = None
         self._drag_photo_indices: set[int] = set()
+        self._drag_photo_widget: Any | None = None
         self.selected_photo_indices: set[int] = set()
         self._photo_selection_anchor: int | None = None
         self.thumbnail_images: list[Any] = []
@@ -499,7 +500,7 @@ class TihuluDesktopApp:
             for index, photo in enumerate(group.photos):
                 tile = self._photo_tile(photo.path, index)
                 self.photo_tiles.append(tile)
-                row, column = divmod(index, 3)
+                row, column = divmod(index, 2)
                 tile.grid(row=row, column=column, sticky="nsew", padx=4, pady=4)
                 self.photo_grid.columnconfigure(column, weight=1)
             self._show_photo(0, preserve_selection=True)
@@ -509,7 +510,7 @@ class TihuluDesktopApp:
 
     def _photo_tile(self, path: Path, index: int) -> Any:
         try:
-            image = self._photo_image(path, (116, 92))
+            image = self._photo_image(path, (180, 135))
         except Exception:
             image = None
         else:
@@ -519,9 +520,9 @@ class TihuluDesktopApp:
             image=image,
             text=path.name,
             compound="top",
-            width=16,
-            height=8 if image is not None else 6,
-            wraplength=116,
+            width=24,
+            height=12 if image is not None else 8,
+            wraplength=176,
             justify="center",
             bg=CYAN if index in self.selected_photo_indices else PANEL_STRONG,
             fg="#02040a" if index in self.selected_photo_indices else TEXT,
@@ -573,15 +574,28 @@ class TihuluDesktopApp:
         self._refresh_photo_tile_selection()
         self._show_photo(index, preserve_selection=True)
         self._drag_photo_indices = set(self.selected_photo_indices)
+        self._drag_photo_widget = event.widget
 
     def _photo_drag_motion(self, _event: Any) -> None:
         if self._drag_photo_indices:
+            if self._drag_photo_widget is not None:
+                try:
+                    self._drag_photo_widget.grab_set()
+                except self.tk.TclError:
+                    pass
             self.root.configure(cursor="fleur")
 
     def _photo_drop(self, event: Any) -> None:
         self.root.configure(cursor="")
         moving = sorted(self._drag_photo_indices)
         self._drag_photo_indices = set()
+        drag_widget = self._drag_photo_widget
+        self._drag_photo_widget = None
+        if drag_widget is not None:
+            try:
+                drag_widget.grab_release()
+            except self.tk.TclError:
+                pass
         if not moving or not self.workspace.groups:
             return
         group_left = self.group_list.winfo_rootx()
