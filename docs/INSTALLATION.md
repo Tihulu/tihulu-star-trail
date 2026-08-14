@@ -2,7 +2,7 @@
 
 Tihulu Star Trail provides native desktop installation for macOS and Debian-based Linux distributions such as Debian, Ubuntu, and Pop!_OS. The hosted browser app remains available without installation at <https://tihulu.github.io/tihulu-star-trail/>.
 
-Every native installation includes the same Manual Review workspace. Drag the dividers between **Groups**, **Photo Preview**, and **Group Photos** to resize those areas. **Thumbnails** can be turned off to show a faster filename-only list for large groups; selection, multi-selection, and drag-to-group movement remain available in both views. The thumbnail preference is remembered for the next launch.
+Every native installation includes the same Manual Review workspace. Drag the dividers between **Groups**, **Photo Preview**, and **Group Photos** to resize those areas; previews and compact controls reflow with the available width. The mouse wheel scrolls both group and photo browsers. **Thumbs** can be disabled independently for groups and photos to avoid decoding unnecessary previews; group thumbnails load only for visible rows, while the photo browser becomes a lightweight filename-only list. Use **Edit** to select or deselect multiple photos with ordinary clicks, then **Done** to drag the selection to another group. Thumbnail preferences are remembered for the next launch.
 
 ## Supported Systems
 

@@ -89,10 +89,14 @@ class TihuluDesktopApp:
         self._drag_photo_widget: Any | None = None
         self.selected_photo_indices: set[int] = set()
         self._photo_selection_anchor: int | None = None
+        self.current_photo_index = 0
         self.thumbnail_images: list[Any] = []
         self.photo_tiles: list[Any] = []
         self.photo_tile_labels: list[Any] = []
+        self.group_thumbnail_images: dict[str, Any] = {}
         self._photo_grid_columns = 2
+        self._preview_resize_after: str | None = None
+        self._preview_render_key: tuple[str, int, int] | None = None
         self._video_capture: Any = None
         self._video_after: str | None = None
         self._video_playing = False
@@ -137,6 +141,10 @@ class TihuluDesktopApp:
         self.show_photo_thumbnails = tk.BooleanVar(
             value=bool(preferences.get("show_photo_thumbnails", True))
         )
+        self.show_group_thumbnails = tk.BooleanVar(
+            value=bool(preferences.get("show_group_thumbnails", False))
+        )
+        self.photo_edit_mode = tk.BooleanVar(value=False)
         if not self.show_photo_thumbnails.get():
             self._photo_grid_columns = 1
 
@@ -176,8 +184,50 @@ class TihuluDesktopApp:
         style.configure("TCheckbutton", background=PANEL, foreground=TEXT)
         style.configure("TRadiobutton", background=PANEL, foreground=TEXT)
         style.configure("TButton", background=PANEL_STRONG, foreground=TEXT, bordercolor=LINE, focusthickness=0, padding=(14, 9))
+        style.configure(
+            "Compact.TButton",
+            background=PANEL_STRONG,
+            foreground=TEXT,
+            bordercolor=LINE,
+            focusthickness=0,
+            font=("Inter", 9),
+            padding=(7, 5),
+        )
+        style.configure(
+            "Active.Compact.TButton",
+            background="#34203e",
+            foreground=CYAN,
+            bordercolor=PINK,
+            focusthickness=0,
+            font=("Inter", 9, "bold"),
+            padding=(7, 5),
+        )
         style.configure("Primary.TButton", background=CYAN, foreground="#02040a", font=("Inter", 10, "bold"))
         style.configure("Danger.TButton", background=PANEL_STRONG, foreground=DANGER)
+        style.configure(
+            "Danger.Compact.TButton",
+            background=PANEL_STRONG,
+            foreground=DANGER,
+            bordercolor=LINE,
+            focusthickness=0,
+            font=("Inter", 9),
+            padding=(7, 5),
+        )
+        style.configure(
+            "Groups.Treeview",
+            background=FIELD,
+            fieldbackground=FIELD,
+            foreground=TEXT,
+            borderwidth=0,
+            relief="flat",
+            rowheight=28,
+            font=("Inter", 10),
+        )
+        style.map(
+            "Groups.Treeview",
+            background=[("selected", PINK)],
+            foreground=[("selected", TEXT)],
+        )
         style.configure(
             "Slim.Vertical.TScrollbar",
             background=PANEL_STRONG,
@@ -189,6 +239,8 @@ class TihuluDesktopApp:
             arrowsize=9,
         )
         style.map("TButton", background=[("active", "#142133"), ("disabled", "#111827")])
+        style.map("Compact.TButton", background=[("active", "#142133"), ("disabled", "#111827")])
+        style.map("Active.Compact.TButton", background=[("active", "#492456")])
         style.map("Primary.TButton", background=[("active", PINK), ("disabled", "#253242")])
         style.map("TCheckbutton", foreground=[("disabled", MUTED)])
         style.map("TRadiobutton", foreground=[("disabled", MUTED)])
@@ -421,61 +473,118 @@ class TihuluDesktopApp:
         groups_panel = self._review_panel(self.review_panes, "Groups", width=270)
         preview_panel = self._review_panel(self.review_panes, "Photo Preview", width=620)
         photos_panel = self._review_panel(self.review_panes, "Group Photos", width=430)
-        self.review_panes.add(groups_panel, minsize=210, stretch="always")
-        self.review_panes.add(preview_panel, minsize=360, stretch="always")
-        self.review_panes.add(photos_panel, minsize=270, stretch="always")
+        self.review_panes.add(groups_panel, minsize=170, stretch="always")
+        self.review_panes.add(preview_panel, minsize=250, stretch="always")
+        self.review_panes.add(photos_panel, minsize=240, stretch="always")
         self.root.after_idle(self._set_initial_review_panes)
 
         groups_panel.rowconfigure(1, weight=1)
         groups_panel.columnconfigure(0, weight=1)
-        self.group_list = self.tk.Listbox(
+        self.ttk.Checkbutton(
+            groups_panel,
+            text="Thumbs",
+            variable=self.show_group_thumbnails,
+            command=self._toggle_group_thumbnails,
+        ).grid(row=0, column=1, sticky="e", pady=(0, 10))
+        self.ttk.Style(self.root).configure(
+            "Groups.Treeview",
+            rowheight=54 if self.show_group_thumbnails.get() else 28,
+        )
+        self.group_browser = self.tk.Frame(
             groups_panel,
             bg=FIELD,
-            fg=TEXT,
-            selectbackground=PINK,
-            selectforeground=TEXT,
-            exportselection=False,
-            activestyle="none",
             highlightthickness=2,
             highlightbackground=LINE,
             highlightcolor=CYAN,
         )
-        self.group_list.grid(row=1, column=0, columnspan=4, sticky="nsew")
-        self.group_list.bind("<<ListboxSelect>>", self._on_group_selected)
+        self.group_browser.grid(row=1, column=0, columnspan=2, sticky="nsew")
+        self.group_browser.rowconfigure(0, weight=1)
+        self.group_browser.columnconfigure(0, weight=1)
+        self.group_list = self.ttk.Treeview(
+            self.group_browser,
+            show="tree",
+            selectmode="browse",
+            style="Groups.Treeview",
+        )
+        self.group_list.column("#0", anchor="w", stretch=True)
+        self.group_scrollbar = self.ttk.Scrollbar(
+            self.group_browser,
+            orient="vertical",
+            command=self._group_yview,
+            style="Slim.Vertical.TScrollbar",
+        )
+        self.group_list.configure(yscrollcommand=self.group_scrollbar.set)
+        self.group_list.grid(row=0, column=0, sticky="nsew")
+        self.group_scrollbar.grid(row=0, column=1, sticky="ns")
+        self.group_list.bind("<<TreeviewSelect>>", self._on_group_selected)
         self.group_list.bind("<ButtonPress-1>", self._group_drag_start)
         self.group_list.bind("<B1-Motion>", self._group_drag_motion)
-        self.ttk.Button(groups_panel, text="Add", command=self.add_group).grid(row=2, column=0, sticky="ew", pady=(8, 0), padx=(0, 4))
-        self.ttk.Button(groups_panel, text="Rename", command=self.rename_group).grid(row=2, column=1, sticky="ew", pady=(8, 0), padx=4)
-        self.ttk.Button(groups_panel, text="↑", command=lambda: self.reorder_group(-1)).grid(row=2, column=2, sticky="ew", pady=(8, 0), padx=4)
-        self.ttk.Button(groups_panel, text="↓", command=lambda: self.reorder_group(1)).grid(row=2, column=3, sticky="ew", pady=(8, 0), padx=(4, 0))
+        self.group_list.bind(
+            "<Configure>",
+            lambda _event: self.root.after_idle(self._load_visible_group_thumbnails),
+        )
+        self._bind_mousewheel(self.group_list, self._scroll_groups)
+
+        group_actions = self.ttk.Frame(groups_panel, style="Panel.TFrame")
+        group_actions.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(7, 0))
+        for column in range(4):
+            group_actions.columnconfigure(column, weight=1)
+        self.ttk.Button(group_actions, text="Add", command=self.add_group, style="Compact.TButton").grid(row=0, column=0, sticky="ew", padx=(0, 2))
+        self.ttk.Button(group_actions, text="Rename", command=self.rename_group, style="Compact.TButton").grid(row=0, column=1, sticky="ew", padx=2)
+        self.ttk.Button(group_actions, text="↑", command=lambda: self.reorder_group(-1), style="Compact.TButton").grid(row=0, column=2, sticky="ew", padx=2)
+        self.ttk.Button(group_actions, text="↓", command=lambda: self.reorder_group(1), style="Compact.TButton").grid(row=0, column=3, sticky="ew", padx=(2, 0))
+
+        group_exports = self.ttk.Frame(groups_panel, style="Panel.TFrame")
+        group_exports.grid(row=3, column=0, columnspan=2, sticky="ew", pady=(6, 0))
+        group_exports.columnconfigure(0, weight=1)
+        group_exports.columnconfigure(1, weight=1)
         self.selected_trail_button = self.ttk.Button(
-            groups_panel, text="Trail This Group", command=lambda: self.export_selected_group("trail")
+            group_exports,
+            text="Trail",
+            command=lambda: self.export_selected_group("trail"),
+            style="Compact.TButton",
         )
         self.selected_timelapse_button = self.ttk.Button(
-            groups_panel, text="Timelapse This Group", command=lambda: self.export_selected_group("timelapse")
+            group_exports,
+            text="Timelapse",
+            command=lambda: self.export_selected_group("timelapse"),
+            style="Compact.TButton",
         )
-        self.selected_trail_button.grid(row=3, column=0, columnspan=2, sticky="ew", pady=(8, 0), padx=(0, 4))
-        self.selected_timelapse_button.grid(row=3, column=2, columnspan=2, sticky="ew", pady=(8, 0), padx=(4, 0))
+        self.selected_trail_button.grid(row=0, column=0, sticky="ew", padx=(0, 3))
+        self.selected_timelapse_button.grid(row=0, column=1, sticky="ew", padx=(3, 0))
         self.controls.extend([self.selected_trail_button, self.selected_timelapse_button])
 
+        self.preview_panel = preview_panel
         preview_panel.rowconfigure(1, weight=1)
         preview_panel.columnconfigure(0, weight=1)
         self.photo_preview = self.ttk.Label(preview_panel, text="Analyze groups to review photos.", anchor="center")
-        self.photo_preview.grid(row=1, column=0, columnspan=3, sticky="nsew")
+        self.photo_preview.grid(row=1, column=0, sticky="nsew")
         self.photo_name = self.ttk.Label(preview_panel, text="", anchor="center")
-        self.photo_name.grid(row=2, column=0, columnspan=3, sticky="ew", pady=(8, 0))
-        self.ttk.Button(preview_panel, text="Previous", command=lambda: self.navigate_photo(-1)).grid(row=3, column=0, sticky="ew", pady=(8, 0), padx=(0, 4))
-        self.ttk.Button(preview_panel, text="Undo", command=self.undo_edit).grid(row=3, column=1, sticky="ew", pady=(8, 0), padx=4)
-        self.ttk.Button(preview_panel, text="Next", command=lambda: self.navigate_photo(1)).grid(row=3, column=2, sticky="ew", pady=(8, 0), padx=(4, 0))
+        self.photo_name.grid(row=2, column=0, sticky="ew", pady=(7, 0))
+        preview_actions = self.ttk.Frame(preview_panel, style="Panel.TFrame")
+        preview_actions.grid(row=3, column=0, pady=(7, 0))
+        self.ttk.Button(preview_actions, text="Prev", width=7, command=lambda: self.navigate_photo(-1), style="Compact.TButton").pack(side="left", padx=2)
+        self.ttk.Button(preview_actions, text="Undo", width=7, command=self.undo_edit, style="Compact.TButton").pack(side="left", padx=2)
+        self.ttk.Button(preview_actions, text="Next", width=7, command=lambda: self.navigate_photo(1), style="Compact.TButton").pack(side="left", padx=2)
+        preview_panel.bind("<Configure>", self._schedule_preview_resize)
 
         photos_panel.rowconfigure(1, weight=1)
         photos_panel.columnconfigure(0, weight=1)
+        photo_header_actions = self.ttk.Frame(photos_panel, style="Panel.TFrame")
+        photo_header_actions.grid(row=0, column=1, sticky="e", pady=(0, 10))
+        self.photo_edit_button = self.ttk.Button(
+            photo_header_actions,
+            text="Edit",
+            command=self._toggle_photo_edit_mode,
+            style="Compact.TButton",
+        )
+        self.photo_edit_button.pack(side="left", padx=(0, 4))
         self.ttk.Checkbutton(
-            photos_panel,
-            text="Thumbnails",
+            photo_header_actions,
+            text="Thumbs",
             variable=self.show_photo_thumbnails,
             command=self._toggle_photo_thumbnails,
-        ).grid(row=0, column=1, sticky="e", pady=(0, 14))
+        ).pack(side="left")
         photo_browser = self.ttk.Frame(photos_panel, style="Panel.TFrame")
         photo_browser.grid(row=1, column=0, columnspan=2, sticky="nsew")
         photo_browser.rowconfigure(0, weight=1)
@@ -502,21 +611,55 @@ class TihuluDesktopApp:
         )
         self.photo_grid.bind("<Configure>", self._sync_photo_grid_scroll)
         self.photo_canvas.bind("<Configure>", self._fit_photo_grid)
+        self._bind_mousewheel(self.photo_canvas, self._scroll_photos)
+        self._bind_mousewheel(self.photo_grid, self._scroll_photos)
         self.target_group = self.ttk.Combobox(photos_panel, state="readonly")
-        self.target_group.grid(row=2, column=0, sticky="ew", pady=(8, 0), padx=(0, 4))
-        self.ttk.Button(photos_panel, text="Move Selected", command=self.move_selected_photos).grid(row=2, column=1, sticky="ew", pady=(8, 0), padx=(4, 0))
-        self.ttk.Button(photos_panel, text="Select All", command=self.select_all_photos).grid(row=3, column=0, sticky="ew", pady=(8, 0), padx=(0, 4))
-        self.ttk.Button(photos_panel, text="Remove Selected", command=self.remove_selected_photos, style="Danger.TButton").grid(row=3, column=1, sticky="ew", pady=(8, 0), padx=(4, 0))
+        self.target_group.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(7, 0))
+        self.photo_action_frame = self.ttk.Frame(photos_panel, style="Panel.TFrame")
+        self.photo_action_frame.grid(row=3, column=0, columnspan=2, sticky="ew", pady=(6, 0))
+        self.move_photos_button = self.ttk.Button(
+            self.photo_action_frame,
+            text="Move",
+            command=self.move_selected_photos,
+            style="Compact.TButton",
+        )
+        self.select_all_button = self.ttk.Button(
+            self.photo_action_frame,
+            text="All",
+            command=self.select_all_photos,
+            style="Compact.TButton",
+        )
+        self.clear_selection_button = self.ttk.Button(
+            self.photo_action_frame,
+            text="Clear",
+            command=self.clear_photo_selection,
+            style="Compact.TButton",
+        )
+        self.remove_photos_button = self.ttk.Button(
+            self.photo_action_frame,
+            text="Remove",
+            command=self.remove_selected_photos,
+            style="Danger.Compact.TButton",
+        )
+        self.photo_action_buttons = [
+            self.move_photos_button,
+            self.select_all_button,
+            self.clear_selection_button,
+            self.remove_photos_button,
+        ]
+        self._layout_photo_actions(430)
         self.ttk.Label(
             photos_panel,
             textvariable=self.selected_photo_count,
             style="Result.TLabel",
-        ).grid(row=4, column=0, columnspan=2, sticky="w", pady=(8, 0))
-        self.ttk.Label(
+        ).grid(row=4, column=0, columnspan=2, sticky="w", pady=(7, 0))
+        self.photo_drag_hint_label = self.ttk.Label(
             photos_panel,
             textvariable=self.photo_drag_hint,
             wraplength=250,
-        ).grid(row=5, column=0, columnspan=2, sticky="ew", pady=(5, 0))
+        )
+        self.photo_drag_hint_label.grid(row=5, column=0, columnspan=2, sticky="ew", pady=(4, 0))
+        photos_panel.bind("<Configure>", self._on_photos_panel_resize)
 
         self.root.bind("<Left>", lambda _event: self.navigate_photo(-1))
         self.root.bind("<Right>", lambda _event: self.navigate_photo(1))
@@ -525,7 +668,7 @@ class TihuluDesktopApp:
         frame = self.ttk.Frame(
             parent,
             style="Panel.TFrame",
-            padding=18,
+            padding=12,
             width=width,
         )
         self.ttk.Label(frame, text=title, style="PanelTitle.TLabel").grid(
@@ -539,8 +682,8 @@ class TihuluDesktopApp:
         total = self.review_panes.winfo_width()
         if total < 900:
             return
-        left = max(210, int(total * 0.20))
-        right_start = min(total - 270, max(left + 360, int(total * 0.65)))
+        left = max(170, int(total * 0.20))
+        right_start = min(total - 240, max(left + 250, int(total * 0.65)))
         try:
             self.review_panes.sash_place(0, left, 1)
             self.review_panes.sash_place(1, right_start, 1)
@@ -548,6 +691,64 @@ class TihuluDesktopApp:
             pass
         else:
             self._review_panes_initialized = True
+
+    def _bind_mousewheel(self, widget: Any, callback: Callable[[Any], str]) -> None:
+        widget.bind("<MouseWheel>", callback, add="+")
+        widget.bind("<Button-4>", callback, add="+")
+        widget.bind("<Button-5>", callback, add="+")
+
+    @staticmethod
+    def _wheel_units(event: Any) -> int:
+        if getattr(event, "num", None) == 4:
+            return -1
+        if getattr(event, "num", None) == 5:
+            return 1
+        delta = int(getattr(event, "delta", 0))
+        if not delta:
+            return 0
+        return -1 if delta > 0 else 1
+
+    def _scroll_groups(self, event: Any) -> str:
+        units = self._wheel_units(event)
+        if units:
+            self.group_list.yview_scroll(units, "units")
+            self.root.after_idle(self._load_visible_group_thumbnails)
+        return "break"
+
+    def _group_yview(self, *args: Any) -> None:
+        self.group_list.yview(*args)
+        self.root.after_idle(self._load_visible_group_thumbnails)
+
+    def _scroll_photos(self, event: Any) -> str:
+        units = self._wheel_units(event)
+        if units:
+            self.photo_canvas.yview_scroll(units, "units")
+        return "break"
+
+    def _on_photos_panel_resize(self, event: Any) -> None:
+        self._layout_photo_actions(event.width)
+        self.photo_drag_hint_label.configure(wraplength=max(150, event.width - 28))
+
+    def _layout_photo_actions(self, width: int) -> None:
+        columns = 4 if width >= 400 else 2
+        if getattr(self, "_photo_action_columns", None) == columns:
+            return
+        self._photo_action_columns = columns
+        for button in self.photo_action_buttons:
+            button.grid_forget()
+        for column in range(4):
+            self.photo_action_frame.columnconfigure(column, weight=0)
+        for index, button in enumerate(self.photo_action_buttons):
+            row, column = divmod(index, columns)
+            button.grid(row=row, column=column, sticky="w", padx=(0, 5), pady=(0, 4))
+
+    def _schedule_preview_resize(self, _event: Any = None) -> None:
+        if self._preview_resize_after is not None:
+            try:
+                self.root.after_cancel(self._preview_resize_after)
+            except self.tk.TclError:
+                pass
+        self._preview_resize_after = self.root.after(120, self._render_current_preview)
 
     def _sync_output_size(self) -> None:
         if hasattr(self, "output_max_side_control"):
@@ -560,12 +761,16 @@ class TihuluDesktopApp:
             )
 
     def _group_drag_start(self, event: Any) -> None:
-        self._drag_group_index = self.group_list.nearest(event.y)
+        item = self.group_list.identify_row(event.y)
+        self._drag_group_index = self.group_list.index(item) if item else None
 
     def _group_drag_motion(self, event: Any) -> None:
         if self._drag_group_index is None or not self.workspace.groups:
             return
-        target = self.group_list.nearest(event.y)
+        item = self.group_list.identify_row(event.y)
+        if not item:
+            return
+        target = self.group_list.index(item)
         if target == self._drag_group_index:
             return
         offset = target - self._drag_group_index
@@ -574,47 +779,111 @@ class TihuluDesktopApp:
         self._render_workspace()
 
     def _on_group_selected(self, _event: Any = None) -> None:
-        selected = self.group_list.curselection()
+        selected = self.group_list.selection()
         if not selected:
             return
-        self.selected_group = int(selected[0])
+        self.selected_group = self.group_list.index(selected[0])
         self._render_photos()
 
     def _render_workspace(self) -> None:
-        self.group_list.delete(0, "end")
-        for group in self.workspace.groups:
-            self.group_list.insert("end", f"{group.name}  ({len(group.photos)})")
+        children = self.group_list.get_children()
+        if children:
+            self.group_list.delete(*children)
+        self.group_thumbnail_images = {}
+        for index, group in enumerate(self.workspace.groups):
+            self.group_list.insert(
+                "",
+                "end",
+                iid=f"group-{index}",
+                text=f"{group.name}  ({len(group.photos)})",
+            )
         names = [group.name for group in self.workspace.groups]
         self.target_group.configure(values=names)
         if self.workspace.groups:
             self.selected_group = min(self.selected_group, len(self.workspace.groups) - 1)
-            self.group_list.selection_set(self.selected_group)
+            self._select_group_row(self.selected_group)
             self.target_group.current(self.selected_group)
+        self.root.after_idle(self._load_visible_group_thumbnails)
         self._render_photos()
 
-    def _render_photos(self) -> None:
+    def _select_group_row(self, index: int) -> None:
+        children = self.group_list.get_children()
+        if not 0 <= index < len(children):
+            return
+        item = children[index]
+        if self.group_list.selection() != (item,):
+            self.group_list.selection_set(item)
+        self.group_list.focus(item)
+        self.group_list.see(item)
+
+    def _load_visible_group_thumbnails(self) -> None:
+        if not self.show_group_thumbnails.get() or not self.workspace.groups:
+            return
+        for item in self.group_list.get_children():
+            if item in self.group_thumbnail_images or not self.group_list.bbox(item):
+                continue
+            index = self.group_list.index(item)
+            group = self.workspace.groups[index]
+            image = None
+            if group.photos:
+                try:
+                    image = self._photo_image(group.photos[0].path, (54, 42))
+                except Exception:
+                    image = None
+            self.group_thumbnail_images[item] = image
+            if image is not None:
+                self.group_list.item(item, image=image)
+            self.root.after_idle(self._load_visible_group_thumbnails)
+            break
+
+    def _toggle_group_thumbnails(self) -> None:
+        self.ttk.Style(self.root).configure(
+            "Groups.Treeview",
+            rowheight=54 if self.show_group_thumbnails.get() else 28,
+        )
+        self._save_preferences()
+        self.group_thumbnail_images = {}
+        for item in self.group_list.get_children():
+            self.group_list.item(item, image="")
+        if self.show_group_thumbnails.get():
+            self.root.after_idle(self._load_visible_group_thumbnails)
+
+    def _render_photos(self, *, preserve_selection: bool = False) -> None:
+        previous_selection = set(self.selected_photo_indices) if preserve_selection else set()
+        previous_current = self.current_photo_index if preserve_selection else 0
+        if not preserve_selection:
+            self._preview_render_key = None
         for child in self.photo_grid.winfo_children():
             child.destroy()
         self.thumbnail_images = []
         self.photo_tiles = []
         self.photo_tile_labels = []
-        self.selected_photo_indices = set()
-        self._photo_selection_anchor = None
+        self.selected_photo_indices = previous_selection
+        if not preserve_selection:
+            self._photo_selection_anchor = None
         if not self.workspace.groups:
+            self.current_photo_index = 0
             self.photo_preview.configure(image="", text="Analyze groups to review photos.")
             self.photo_name.configure(text="")
             self._refresh_photo_tile_selection()
             return
         group = self.workspace.groups[self.selected_group]
         if group.photos:
-            self.selected_photo_indices = {0}
+            self.current_photo_index = min(previous_current, len(group.photos) - 1)
+            self.selected_photo_indices = {
+                index for index in self.selected_photo_indices if index < len(group.photos)
+            }
+            if not preserve_selection:
+                self.selected_photo_indices = {self.current_photo_index}
             for index, photo in enumerate(group.photos):
                 tile = self._photo_tile(photo.path, index)
                 self.photo_tiles.append(tile)
             self._layout_photo_tiles()
             self._refresh_photo_tile_selection()
-            self._show_photo(0, preserve_selection=True)
+            self._show_photo(self.current_photo_index, preserve_selection=True)
         else:
+            self.current_photo_index = 0
+            self.selected_photo_indices = set()
             self.photo_preview.configure(image="", text="This group is empty.")
             self.photo_name.configure(text="")
             self._refresh_photo_tile_selection()
@@ -672,6 +941,7 @@ class TihuluDesktopApp:
         for widget in bound_widgets:
             widget.bind("<ButtonPress-1>", lambda event, item=index: self._photo_drag_start(event, item))
             widget.bind("<B1-Motion>", self._photo_drag_motion)
+            self._bind_mousewheel(widget, self._scroll_photos)
         return tile
 
     def _sync_photo_grid_scroll(self, _event: Any = None) -> None:
@@ -699,7 +969,16 @@ class TihuluDesktopApp:
             if self.show_photo_thumbnails.get()
             else 1
         )
-        self._render_photos()
+        self._render_photos(preserve_selection=True)
+
+    def _toggle_photo_edit_mode(self) -> None:
+        self.photo_edit_mode.set(not self.photo_edit_mode.get())
+        self._refresh_photo_tile_selection()
+
+    def clear_photo_selection(self) -> None:
+        self.selected_photo_indices = set()
+        self._photo_selection_anchor = None
+        self._refresh_photo_tile_selection()
 
     def _preferences_path(self) -> Path:
         if sys.platform == "darwin":
@@ -718,7 +997,10 @@ class TihuluDesktopApp:
             self.preferences_path.parent.mkdir(parents=True, exist_ok=True)
             self.preferences_path.write_text(
                 json.dumps(
-                    {"show_photo_thumbnails": self.show_photo_thumbnails.get()},
+                    {
+                        "show_photo_thumbnails": self.show_photo_thumbnails.get(),
+                        "show_group_thumbnails": self.show_group_thumbnails.get(),
+                    },
                     indent=2,
                 )
                 + "\n",
@@ -731,23 +1013,55 @@ class TihuluDesktopApp:
     def _refresh_photo_tile_selection(self) -> None:
         for index, tile in enumerate(self.photo_tiles):
             selected = index in self.selected_photo_indices
+            active = index == self.current_photo_index
             background = "#123a43" if selected else PANEL_STRONG
             tile.configure(
                 bg=background,
-                highlightbackground=CYAN if selected else LINE,
+                highlightbackground=PINK if active else CYAN if selected else LINE,
+                cursor="crosshair" if self.photo_edit_mode.get() else "hand2",
             )
+            for child in tile.winfo_children():
+                child.configure(cursor="crosshair" if self.photo_edit_mode.get() else "hand2")
             if index < len(self.photo_tile_labels):
                 name = self.workspace.groups[self.selected_group].photos[index].path.name
+                prefix = "✓  " if selected else "›  " if active else ""
                 self.photo_tile_labels[index].configure(
-                    text=f"✓  {name}" if selected else name,
+                    text=f"{prefix}{name}",
                     bg=background,
-                    fg=CYAN if selected else TEXT,
-                    font=("Inter", 10, "bold" if selected else "normal"),
+                    fg=CYAN if selected else PINK if active else TEXT,
+                    font=("Inter", 10, "bold" if selected or active else "normal"),
                 )
         count = len(self.selected_photo_indices)
         self.selected_photo_count.set(f"{count} photo{'s' if count != 1 else ''} selected")
+        has_photos = bool(self.photo_tiles)
+        has_selection = bool(self.selected_photo_indices)
+        self.photo_edit_button.configure(
+            text="Done" if self.photo_edit_mode.get() else "Edit",
+            style="Active.Compact.TButton" if self.photo_edit_mode.get() else "Compact.TButton",
+            state="normal" if has_photos else "disabled",
+        )
+        self.select_all_button.configure(state="normal" if has_photos else "disabled")
+        self.clear_selection_button.configure(state="normal" if has_selection else "disabled")
+        self.move_photos_button.configure(state="normal" if has_selection else "disabled")
+        self.remove_photos_button.configure(state="normal" if has_selection else "disabled")
+        self.photo_drag_hint.set(
+            "Edit mode: click photos to add or remove them from the selection. Click Done to drag them."
+            if self.photo_edit_mode.get()
+            else "Click a photo to preview it. Use Edit for multi-select, or drag selected photos onto a group."
+        )
 
     def _photo_drag_start(self, event: Any, index: int) -> None:
+        if self.photo_edit_mode.get():
+            if index in self.selected_photo_indices:
+                self.selected_photo_indices.remove(index)
+            else:
+                self.selected_photo_indices.add(index)
+            self._photo_selection_anchor = index
+            self._drag_photo_indices = set()
+            self._drag_photo_widget = None
+            self._show_photo(index, preserve_selection=True)
+            self._refresh_photo_tile_selection()
+            return
         is_shift = bool(event.state & 0x0001)
         # Ctrl on Linux/Windows and Command (Mod1/Mod2) on macOS.
         is_toggle = bool(event.state & (0x0004 | 0x0008 | 0x0010))
@@ -775,6 +1089,8 @@ class TihuluDesktopApp:
         self._drag_photo_widget = event.widget
 
     def _photo_drag_motion(self, event: Any) -> None:
+        if self.photo_edit_mode.get():
+            return
         if self._drag_photo_indices:
             if self._drag_photo_widget is not None:
                 try:
@@ -784,15 +1100,12 @@ class TihuluDesktopApp:
             self.root.configure(cursor="fleur")
             target = self._group_drop_target(event.x_root, event.y_root)
             if target is None or target == self.selected_group:
-                self.group_list.configure(highlightbackground=LINE)
+                self.group_browser.configure(highlightbackground=LINE)
                 self.photo_drag_hint.set(
                     f"Dragging {len(self._drag_photo_indices)} selected photo(s) — drop on another group name."
                 )
             else:
-                self.group_list.configure(highlightbackground=CYAN)
-                self.group_list.selection_clear(0, "end")
-                self.group_list.selection_set(target)
-                self.group_list.activate(target)
+                self.group_browser.configure(highlightbackground=CYAN)
                 self.photo_drag_hint.set(
                     f"Release to move {len(self._drag_photo_indices)} photo(s) to {self.workspace.groups[target].name}."
                 )
@@ -808,7 +1121,7 @@ class TihuluDesktopApp:
                 drag_widget.grab_release()
             except self.tk.TclError:
                 pass
-        self.group_list.configure(highlightbackground=LINE)
+        self.group_browser.configure(highlightbackground=LINE)
         self.photo_drag_hint.set(
             "Select cards, then drag them onto a group name to move them."
         )
@@ -816,12 +1129,10 @@ class TihuluDesktopApp:
             return
         target = self._group_drop_target(event.x_root, event.y_root)
         if target is None:
-            self.group_list.selection_clear(0, "end")
-            self.group_list.selection_set(self.selected_group)
+            self._select_group_row(self.selected_group)
             return
         if target < 0 or target >= len(self.workspace.groups) or target == self.selected_group:
-            self.group_list.selection_clear(0, "end")
-            self.group_list.selection_set(self.selected_group)
+            self._select_group_row(self.selected_group)
             return
         self.workspace.move_photos(self.selected_group, moving, target)
         self.selected_group = target
@@ -834,7 +1145,10 @@ class TihuluDesktopApp:
         group_bottom = group_top + self.group_list.winfo_height()
         if not (group_left <= x_root < group_right and group_top <= y_root < group_bottom):
             return None
-        target = self.group_list.nearest(y_root - group_top)
+        item = self.group_list.identify_row(y_root - group_top)
+        if not item:
+            return None
+        target = self.group_list.index(item)
         return target if 0 <= target < len(self.workspace.groups) else None
 
     def _show_photo(self, index: int, preserve_selection: bool = False) -> None:
@@ -844,16 +1158,37 @@ class TihuluDesktopApp:
         if not photos:
             return
         index = max(0, min(index, len(photos) - 1))
+        self.current_photo_index = index
+        self._render_current_preview()
+        self.photo_name.configure(text=f"{index + 1} / {len(photos)} — {photos[index].path.name}")
+        if not preserve_selection:
+            self.selected_photo_indices = {index}
+        self._refresh_photo_tile_selection()
+
+    def _render_current_preview(self) -> None:
+        self._preview_resize_after = None
+        if not self.workspace.groups:
+            return
+        photos = self.workspace.groups[self.selected_group].photos
+        if not photos:
+            return
+        index = max(0, min(self.current_photo_index, len(photos) - 1))
+        panel_width = max(120, self.preview_panel.winfo_width() - 24)
+        panel_height = max(120, self.preview_panel.winfo_height() - 110)
+        self.photo_name.configure(wraplength=panel_width)
+        render_key = (str(photos[index].path), panel_width, panel_height)
+        if render_key == self._preview_render_key:
+            return
+        self._preview_render_key = render_key
         try:
-            self.preview_image = self._photo_image(photos[index].path, (660, 560))
+            self.preview_image = self._photo_image(
+                photos[index].path,
+                (panel_width, panel_height),
+            )
         except Exception as error:
             self.photo_preview.configure(image="", text=f"Preview failed: {error}")
         else:
             self.photo_preview.configure(image=self.preview_image, text="")
-        self.photo_name.configure(text=f"{index + 1} / {len(photos)} — {photos[index].path.name}")
-        if not preserve_selection:
-            self.selected_photo_indices = {index}
-            self._refresh_photo_tile_selection()
 
     def _photo_image(self, path: Path, bounds: tuple[int, int]) -> Any:
         import cv2
@@ -868,8 +1203,11 @@ class TihuluDesktopApp:
     def navigate_photo(self, offset: int) -> None:
         if not self.workspace.groups or not self.workspace.groups[self.selected_group].photos:
             return
-        current = min(self.selected_photo_indices) if self.selected_photo_indices else 0
-        self._show_photo((current + offset) % len(self.workspace.groups[self.selected_group].photos))
+        self._show_photo(
+            (self.current_photo_index + offset)
+            % len(self.workspace.groups[self.selected_group].photos),
+            preserve_selection=True,
+        )
 
     def add_group(self) -> None:
         self.selected_group = self.workspace.add_group()
@@ -1222,7 +1560,7 @@ FPS / Video Quality Mbps
 12–18 FPS feels calm, 24 is cinematic, and 30–60 is smoother but needs more frames. 4–8 Mbps works for previews, 10–20 is cleaner, and 25+ is best for 4K-style exports.
 
 Manual Review
-Analyze Groups first. Drag the panel dividers to resize Groups, Photo Preview, and Group Photos. Turn Thumbnails off for a faster filename-only list. You can rename, add, drag-reorder, move or remove photos, select cards with Ctrl/Command or Shift, drag selected photo cards onto another group, navigate with arrow keys, and undo up to 50 edits. Export Edited writes only non-empty groups.
+Analyze Groups first. Drag the panel dividers to resize Groups, Photo Preview, and Group Photos; the preview and controls adapt to the available width. The mouse wheel scrolls both lists. Group Thumbs loads previews only for visible groups; Photo Thumbs can be turned off for a faster filename-only list. Click Edit to select or deselect multiple photos with normal clicks, then Done to drag them to another group. Ctrl/Command and Shift selection also remain available. You can rename, add, drag-reorder, move or remove photos, navigate with arrow keys, and undo up to 50 edits. Export Edited writes only non-empty groups.
 
 Original photos are never modified.
 """
