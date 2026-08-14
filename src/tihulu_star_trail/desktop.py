@@ -312,6 +312,7 @@ class TihuluDesktopApp:
         monitor = self._panel(process_tab, 0, 1, "Monitor & Output Preview")
         controls.columnconfigure(0, weight=1)
         monitor.columnconfigure(0, weight=1)
+        monitor.columnconfigure(1, weight=1)
         monitor.rowconfigure(3, weight=1)
 
         self._mode_row(controls, 1)
@@ -323,7 +324,8 @@ class TihuluDesktopApp:
 
         self.ttk.Label(monitor, text="Current Job", style="PanelTitle.TLabel").grid(row=1, column=0, sticky="w", pady=(4, 10))
         self.result_label = self.ttk.Label(monitor, textvariable=self.result, style="Result.TLabel", wraplength=520, justify="left")
-        self.result_label.grid(row=1, column=1, sticky="e", pady=(4, 10))
+        self.result_label.grid(row=1, column=1, sticky="ew", pady=(4, 10))
+        monitor.bind("<Configure>", lambda event: self.result_label.configure(wraplength=max(160, event.width // 2)))
         self.output_preview = self.ttk.Label(monitor, text="Completed images and videos appear here.", anchor="center")
         self.output_preview.grid(row=2, column=0, columnspan=2, sticky="nsew", pady=(0, 10))
         preview_actions = self.ttk.Frame(monitor, style="Panel.TFrame")
@@ -371,7 +373,8 @@ class TihuluDesktopApp:
     def _path_row(self, parent: Any, row: int, label: str, variable: Any, command: Callable[[], None]) -> None:
         frame = self.ttk.Frame(parent, style="Panel.TFrame")
         frame.grid(row=row, column=0, sticky="ew", pady=(0, 12))
-        frame.columnconfigure(0, weight=1)
+        for column in range(4):
+            frame.columnconfigure(column, weight=1)
         self.ttk.Label(frame, text=label).grid(row=0, column=0, sticky="w")
         entry = self.ttk.Entry(frame, textvariable=variable)
         entry.grid(row=1, column=0, sticky="ew", pady=(6, 0), padx=(0, 8))
@@ -479,13 +482,12 @@ class TihuluDesktopApp:
         self.run_button = self.ttk.Button(frame, text="Run", command=self.run, style="Primary.TButton")
         self.stop_button = self.ttk.Button(frame, text="Stop", command=self.stop_work, style="Danger.Compact.TButton", state="disabled")
         self.open_button = self.ttk.Button(frame, text="Open Output", command=self.open_output)
-        self.scan_button.grid(row=0, column=1, padx=(0, 8))
-        self.analyze_button.grid(row=0, column=2, padx=(0, 8))
-        self.manual_button.grid(row=0, column=3, padx=(0, 8))
-        self.export_button.grid(row=0, column=4, padx=(0, 8))
-        self.open_button.grid(row=0, column=5, padx=(0, 8))
-        self.run_button.grid(row=0, column=6, padx=(0, 8))
-        self.stop_button.grid(row=0, column=7)
+        for index, button in enumerate((
+            self.scan_button, self.analyze_button, self.manual_button, self.export_button,
+            self.open_button, self.run_button, self.stop_button,
+        )):
+            row_index, column = divmod(index, 4)
+            button.grid(row=row_index, column=column, sticky="ew", padx=3, pady=3)
         self.controls.extend([self.scan_button, self.analyze_button, self.manual_button, self.export_button, self.run_button, self.open_button])
 
     def _build_review_tab(self, parent: Any) -> None:
