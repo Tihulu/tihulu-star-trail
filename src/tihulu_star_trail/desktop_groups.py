@@ -106,7 +106,7 @@ class GroupWorkspace:
         self.groups[group_index].photos = reordered
         return list(range(insertion, insertion + len(moving)))
 
-    def sort_photos(self, group_index: int, mode: str) -> None:
+    def sort_photos(self, group_index: int, mode: str, *, reverse: bool = False) -> None:
         """Apply an explicit timelapse order; later drag reordering remains authoritative."""
         photos = self.groups[group_index].photos
         if len(photos) < 2:
@@ -125,7 +125,7 @@ class GroupWorkspace:
                     int(part) if part.isdigit() else part.casefold()
                     for part in re.split(r"(\d+)", photo.path.name)
                 )
-        ordered = sorted(photos, key=key)
+        ordered = sorted(photos, key=key, reverse=reverse)
         if ordered != photos:
             self.snapshot()
             self.groups[group_index].photos = ordered
