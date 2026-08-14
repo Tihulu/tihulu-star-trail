@@ -69,3 +69,15 @@ def test_render_timelapse_creates_video(tmp_path: Path) -> None:
 
     assert output_path.exists()
     assert output_path.stat().st_size > 0
+
+
+def test_timelapse_can_preserve_manual_frame_order(monkeypatch: pytest.MonkeyPatch) -> None:
+    paths = [Path("third.jpg"), Path("first.jpg"), Path("second.jpg")]
+    monkeypatch.setattr(
+        stacker,
+        "sort_images_by_time",
+        lambda supplied: list(reversed(supplied)),
+    )
+
+    assert stacker._timelapse_paths(paths, preserve_order=True) == paths
+    assert stacker._timelapse_paths(paths, preserve_order=False) == list(reversed(paths))

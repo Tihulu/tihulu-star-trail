@@ -87,6 +87,7 @@ class TihuluDesktopApp:
         self._drag_group_index: int | None = None
         self._drag_photo_indices: set[int] = set()
         self._drag_photo_widget: Any | None = None
+        self._photo_reorder_target: tuple[int, bool] | None = None
         self.selected_photo_indices: set[int] = set()
         self._photo_selection_anchor: int | None = None
         self.current_photo_index = 0
@@ -134,7 +135,7 @@ class TihuluDesktopApp:
         self.result = tk.StringVar(value="No result yet")
         self.selected_photo_count = tk.StringVar(value="0 photos selected")
         self.photo_drag_hint = tk.StringVar(
-            value="Select cards, then drag them onto a group name to move them."
+            value="Drag photos to set timelapse order, or drop them onto another group."
         )
         self.preferences_path = self._preferences_path()
         preferences = self._load_preferences()
@@ -1047,7 +1048,7 @@ class TihuluDesktopApp:
         self.photo_drag_hint.set(
             "Edit mode: click photos to add or remove them from the selection. Click Done to drag them."
             if self.photo_edit_mode.get()
-            else "Click a photo to preview it. Use Edit for multi-select, or drag selected photos onto a group."
+            else "Click a photo to preview it. Use Edit for multi-select; drag photos to reorder the timelapse or move them to another group."
         )
 
     def _photo_drag_start(self, event: Any, index: int) -> None:
@@ -1098,16 +1099,26 @@ class TihuluDesktopApp:
                 except self.tk.TclError:
                     pass
             self.root.configure(cursor="fleur")
-            target = self._group_drop_target(event.x_root, event.y_root)
-            if target is None or target == self.selected_group:
-                self.group_browser.configure(highlightbackground=LINE)
-                self.photo_drag_hint.set(
-                    f"Dragging {len(self._drag_photo_indices)} selected photo(s) — drop on another group name."
-                )
-            else:
+            group_target = self._group_drop_target(event.x_root, event.y_root)
+            photo_target = self._photo_drop_target(event.x_root, event.y_root)
+            self._clear_photo_reorder_cue()
+            if group_target is not None and group_target != self.selected_group:
                 self.group_browser.configure(highlightbackground=CYAN)
                 self.photo_drag_hint.set(
-                    f"Release to move {len(self._drag_photo_indices)} photo(s) to {self.workspace.groups[target].name}."
+                    f"Release to move {len(self._drag_photo_indices)} photo(s) to {self.workspace.groups[group_target].name}."
+                )
+            elif photo_target is not None and photo_target[0] not in self._drag_photo_indices:
+                self.group_browser.configure(highlightbackground=LINE)
+                self._photo_reorder_target = photo_target
+                target_index, place_after = photo_target
+                self.photo_tiles[target_index].configure(highlightbackground=YELLOW)
+                self.photo_drag_hint.set(
+                    f"Release to place {len(self._drag_photo_indices)} photo(s) {'after' if place_after else 'before'} {self.workspace.groups[self.selected_group].photos[target_index].path.name}."
+                )
+            else:
+                self.group_browser.configure(highlightbackground=LINE)
+                self.photo_drag_hint.set(
+                    "Drag onto another photo to set timelapse order, or onto another group to move it."
                 )
 
     def _photo_drop(self, event: Any) -> None:
@@ -1122,21 +1133,55 @@ class TihuluDesktopApp:
             except self.tk.TclError:
                 pass
         self.group_browser.configure(highlightbackground=LINE)
+        photo_target = self._photo_drop_target(event.x_root, event.y_root)
+        self._clear_photo_reorder_cue()
         self.photo_drag_hint.set(
-            "Select cards, then drag them onto a group name to move them."
+            "Drag photos to set timelapse order, or drop them onto another group."
         )
         if not moving or not self.workspace.groups:
             return
         target = self._group_drop_target(event.x_root, event.y_root)
-        if target is None:
-            self._select_group_row(self.selected_group)
+        if target is not None and 0 <= target < len(self.workspace.groups) and target != self.selected_group:
+            self.workspace.move_photos(self.selected_group, moving, target)
+            self.selected_group = target
+            self._render_workspace()
             return
-        if target < 0 or target >= len(self.workspace.groups) or target == self.selected_group:
-            self._select_group_row(self.selected_group)
+        if photo_target is not None and photo_target[0] not in moving:
+            photos = self.workspace.groups[self.selected_group].photos
+            current_photo = photos[self.current_photo_index] if photos else None
+            new_selection = self.workspace.reorder_photos(
+                self.selected_group,
+                moving,
+                photo_target[0],
+                place_after=photo_target[1],
+            )
+            self.selected_photo_indices = set(new_selection)
+            if current_photo is not None:
+                self.current_photo_index = self.workspace.groups[self.selected_group].photos.index(current_photo)
+            self._render_photos(preserve_selection=True)
             return
-        self.workspace.move_photos(self.selected_group, moving, target)
-        self.selected_group = target
-        self._render_workspace()
+        self._select_group_row(self.selected_group)
+
+    def _photo_drop_target(self, x_root: int, y_root: int) -> tuple[int, bool] | None:
+        for index, tile in enumerate(self.photo_tiles):
+            left = tile.winfo_rootx()
+            top = tile.winfo_rooty()
+            width = tile.winfo_width()
+            height = tile.winfo_height()
+            if left <= x_root < left + width and top <= y_root < top + height:
+                place_after = (
+                    x_root >= left + width / 2
+                    if self.show_photo_thumbnails.get()
+                    else y_root >= top + height / 2
+                )
+                return index, place_after
+        return None
+
+    def _clear_photo_reorder_cue(self) -> None:
+        if self._photo_reorder_target is None:
+            return
+        self._photo_reorder_target = None
+        self._refresh_photo_tile_selection()
 
     def _group_drop_target(self, x_root: int, y_root: int) -> int | None:
         group_left = self.group_list.winfo_rootx()
@@ -1560,7 +1605,7 @@ FPS / Video Quality Mbps
 12–18 FPS feels calm, 24 is cinematic, and 30–60 is smoother but needs more frames. 4–8 Mbps works for previews, 10–20 is cleaner, and 25+ is best for 4K-style exports.
 
 Manual Review
-Analyze Groups first. Drag the panel dividers to resize Groups, Photo Preview, and Group Photos; the preview and controls adapt to the available width. The mouse wheel scrolls both lists. Group Thumbs loads previews only for visible groups; Photo Thumbs can be turned off for a faster filename-only list. Click Edit to select or deselect multiple photos with normal clicks, then Done to drag them to another group. Ctrl/Command and Shift selection also remain available. You can rename, add, drag-reorder, move or remove photos, navigate with arrow keys, and undo up to 50 edits. Export Edited writes only non-empty groups.
+Analyze Groups first. Drag the panel dividers to resize Groups, Photo Preview, and Group Photos; the preview and controls adapt to the available width. The mouse wheel scrolls both lists. Group Thumbs loads previews only for visible groups; Photo Thumbs can be turned off for a faster filename-only list. Click Edit to select or deselect multiple photos with normal clicks, then Done to drag them before or after another photo to set the timelapse order, or onto another group to move them. Multi-selected photos move as one block. Ctrl/Command and Shift selection also remain available. Trail stacking is order-independent, but moving or removing frames changes its result. You can rename, add, drag-reorder, move or remove photos, navigate with arrow keys, and undo up to 50 edits. Export Edited writes only non-empty groups.
 
 Original photos are never modified.
 """

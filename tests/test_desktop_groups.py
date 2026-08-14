@@ -33,6 +33,25 @@ def test_workspace_creates_unique_names_and_filters_empty_groups() -> None:
     assert workspace.nonempty_groups() == []
 
 
+def test_workspace_reorders_selected_photos_as_a_block_and_undoes() -> None:
+    group = EditableGroup(
+        "group_001",
+        [assigned_photo(Path(name)) for name in ("one.jpg", "two.jpg", "three.jpg", "four.jpg")],
+    )
+    workspace = GroupWorkspace([group])
+
+    selected = workspace.reorder_photos(0, [1, 2], 0)
+
+    assert selected == [0, 1]
+    assert [photo.path.name for photo in workspace.groups[0].photos] == [
+        "two.jpg", "three.jpg", "one.jpg", "four.jpg"
+    ]
+    assert workspace.undo()
+    assert [photo.path.name for photo in workspace.groups[0].photos] == [
+        "one.jpg", "two.jpg", "three.jpg", "four.jpg"
+    ]
+
+
 def test_editable_groups_can_be_exported_to_a_manifest(tmp_path: Path) -> None:
     photo_path = tmp_path / "photo.jpg"
     photo_path.write_bytes(b"not decoded when trails are disabled")
@@ -79,10 +98,12 @@ def test_selected_group_timelapse_only_uses_the_chosen_group(tmp_path: Path, mon
     selected = EditableGroup("chosen", [assigned_photo(tmp_path / "chosen.jpg")])
     seen: list[list[str]] = []
     received_max_sides: list[object] = []
+    preserves_order: list[bool] = []
 
     def fake_timelapses(groups, output, **kwargs):
         seen.append([group.name for group in groups])
         received_max_sides.append(kwargs["max_side"])
+        preserves_order.append(kwargs["preserve_order"])
         return [output / "chosen_timelapse.mp4"]
 
     monkeypatch.setattr(engine, "render_group_timelapses", fake_timelapses)
@@ -95,4 +116,5 @@ def test_selected_group_timelapse_only_uses_the_chosen_group(tmp_path: Path, mon
 
     assert seen == [[selected.name]]
     assert received_max_sides == [None]
+    assert preserves_order == [True]
     assert result["timelapses"] == [str(tmp_path / "output" / "timelapses" / "chosen_timelapse.mp4")]

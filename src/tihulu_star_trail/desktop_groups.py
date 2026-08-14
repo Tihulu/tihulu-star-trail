@@ -78,6 +78,33 @@ class GroupWorkspace:
         ]
         self.groups[target].photos.extend(moving)
 
+    def reorder_photos(
+        self,
+        group_index: int,
+        photo_indices: Iterable[int],
+        target_index: int,
+        *,
+        place_after: bool = False,
+    ) -> list[int]:
+        """Move one or more photos as a block within a group."""
+        photos = self.groups[group_index].photos
+        selected = sorted({index for index in photo_indices if 0 <= index < len(photos)})
+        if not selected or not 0 <= target_index < len(photos) or target_index in selected:
+            return selected
+
+        selected_set = set(selected)
+        moving = [photos[index] for index in selected]
+        remaining = [photo for index, photo in enumerate(photos) if index not in selected_set]
+        insertion = target_index + (1 if place_after else 0)
+        insertion -= sum(1 for index in selected if index < insertion)
+        reordered = remaining[:insertion] + moving + remaining[insertion:]
+        if reordered == photos:
+            return selected
+
+        self.snapshot()
+        self.groups[group_index].photos = reordered
+        return list(range(insertion, insertion + len(moving)))
+
     def remove_photos(self, group_index: int, photo_indices: Iterable[int]) -> None:
         selected = set(photo_indices)
         if not selected:

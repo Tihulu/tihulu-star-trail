@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Tihulu Star Trail Web</title>
-    <link rel="stylesheet" href="style.css?v=20260814-layout">
+    <link rel="stylesheet" href="style.css?v=20260814-photo-order-2">
   </head>
   <body>
     <canvas id="starfield" aria-hidden="true"></canvas>
@@ -71,6 +71,10 @@
               <div>
                 <dt>Time Window Hours</dt>
                 <dd>Photos taken within this many hours are more likely to stay in the same group.</dd>
+              </div>
+              <div>
+                <dt>Group Photo Order</dt>
+                <dd>Drag photos inside Group Photos to set the timelapse order. Trail stacking is order-independent; move or remove photos to change which frames build the trail.</dd>
               </div>
             </dl>
           </aside>
@@ -225,11 +229,13 @@
             </div>
           </div>
           <div class="photo-strip" id="photoStrip"></div>
+          <p class="photo-strip-hint">Drag photos to reorder the timelapse. Select multiple photos to move them as a block. Move or remove frames to edit the trail.</p>
         </div>
       </section>
 
       <section class="groups-panel" id="groupsPanel" aria-label="Detected groups"></section>
     </main>
-    <script src="app.js?v=20260814-layout"></script>
+    <script src="photo-order.js?v=20260814-photo-order-2"></script>
+    <script src="app.js?v=20260814-photo-order-2"></script>
   </body>
 </html>
