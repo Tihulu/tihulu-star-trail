@@ -436,7 +436,7 @@ class TihuluDesktopApp:
         self.ttk.Button(photos_panel, text="Remove Selected", command=self.remove_selected_photos, style="Danger.TButton").grid(row=3, column=1, sticky="ew", pady=(8, 0), padx=(4, 0))
         self.ttk.Label(
             photos_panel,
-            text="Click cards to select. Drag selected cards onto a group to move them.",
+            text="Click a card to select. Ctrl/Command toggles cards; Shift selects a range. Drag selected cards onto a group to move them.",
             wraplength=250,
         ).grid(row=4, column=0, columnspan=2, sticky="ew", pady=(8, 0))
 
