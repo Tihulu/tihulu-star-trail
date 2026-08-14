@@ -117,6 +117,7 @@ class TihuluDesktopApp:
         self.max_side = tk.StringVar(value=str(DEFAULT_MAX_SIDE))
         self.output_max_side = tk.StringVar(value="1600")
         self.keep_original_size = tk.BooleanVar(value=False)
+        self.keep_original_video_size = tk.BooleanVar(value=False)
         self.image_format = tk.StringVar(value="jpeg")
         self.video_format = tk.StringVar(value="mp4")
         self.output_name = tk.StringVar(value="tihulu-output")
@@ -303,6 +304,8 @@ class TihuluDesktopApp:
             spin.grid(row=1, column=0, sticky="ew", pady=(6, 0))
             if label == "Output Max Side":
                 self.output_max_side_control = spin
+            elif label == "Video Max Side":
+                self.video_max_side_control = spin
             self.controls.append(spin)
 
         cell = self.ttk.Frame(frame, style="Panel.TFrame")
@@ -340,10 +343,17 @@ class TihuluDesktopApp:
             command=self._sync_output_size,
         )
         keep_original.grid(row=0, column=0, sticky="w")
-        self.ttk.Label(size_cell, text="Output Name").grid(row=1, column=0, sticky="w", pady=(6, 0))
+        keep_original_video = self.ttk.Checkbutton(
+            size_cell,
+            text="Keep Original Video Size",
+            variable=self.keep_original_video_size,
+            command=self._sync_output_size,
+        )
+        keep_original_video.grid(row=1, column=0, sticky="w", pady=(5, 0))
+        self.ttk.Label(size_cell, text="Output Name").grid(row=2, column=0, sticky="w", pady=(6, 0))
         output_name = self.ttk.Entry(size_cell, textvariable=self.output_name)
-        output_name.grid(row=2, column=0, sticky="ew", pady=(4, 0))
-        self.controls.extend([keep_original, output_name])
+        output_name.grid(row=3, column=0, sticky="ew", pady=(4, 0))
+        self.controls.extend([keep_original, keep_original_video, output_name])
 
     def _action_row(self, parent: Any, row: int) -> None:
         frame = self.ttk.Frame(parent, style="Panel.TFrame")
@@ -448,6 +458,10 @@ class TihuluDesktopApp:
         if hasattr(self, "output_max_side_control"):
             self.output_max_side_control.configure(
                 state="disabled" if self.keep_original_size.get() else "normal"
+            )
+        if hasattr(self, "video_max_side_control"):
+            self.video_max_side_control.configure(
+                state="disabled" if self.keep_original_video_size.get() else "normal"
             )
 
     def _group_drag_start(self, event: Any) -> None:
@@ -838,7 +852,7 @@ class TihuluDesktopApp:
             "output_max_side": 0 if self.keep_original_size.get() else int(float(self.output_max_side.get())),
             "output_name": self._safe_output_name(self.output_name.get()),
             "fps": float(self.fps.get()),
-            "video_max_side": int(float(self.video_max_side.get())),
+            "video_max_side": 0 if self.keep_original_video_size.get() else int(float(self.video_max_side.get())),
             "video_quality_mbps": float(self.video_quality_mbps.get()),
             "max_side": int(float(self.max_side.get())),
             "time_metadata": self.time_metadata.get(),
@@ -990,10 +1004,10 @@ Image Format / JPEG Quality
 PNG is lossless and larger. JPEG is smaller; higher JPEG quality preserves more faint detail.
 
 Video Format / Video Max Side / FPS
-MP4 is broadly compatible. WebM uses VP9 when the installed OpenCV build supports it. FPS controls playback speed; Video Max Side limits resolution.
+MP4 is broadly compatible. WebM uses VP9 when the installed OpenCV build supports it. FPS controls playback speed; Video Max Side limits resolution. Enable Keep Original Video Size to make the timelapse at the source photo dimensions without video resizing.
 
 Manual Review
-Analyze Groups first. You can rename, add, drag-reorder, move or remove photos, multi-select, navigate with arrow keys, and undo up to 50 edits. Export Edited writes only non-empty groups.
+Analyze Groups first. You can rename, add, drag-reorder, move or remove photos, select cards with Ctrl/Command or Shift, drag selected photo cards onto another group, navigate with arrow keys, and undo up to 50 edits. Export Edited writes only non-empty groups.
 
 Original photos are never modified.
 """

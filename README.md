@@ -16,6 +16,7 @@ The grouping step uses OpenCV feature matching and a RANSAC homography check. In
 - Opens a native Debian/Pop!_OS desktop app with `tihulu desktop`.
 - Opens the same native feature set as a macOS `.app`, including RAW processing, manual group review, previews, and timelapse playback.
 - Gives the native desktop app a manual group review workspace with a scrollable thumbnail grid, click-to-select and drag-to-group photo moves, group creation/renaming/reordering, 50-step undo, RAW-capable previews, edited-group export, and trail/timelapse export for only the selected group.
+- Lets native desktop timelapse export keep the photos' original resolution when **Keep Original Video Size** is selected.
 
 The same desktop review workspace is included in every native installation path: macOS DMG, macOS installer, Linux AppImage, and Debian/Pop!_OS installer.
 - Previews completed trail images and plays completed timelapses inside the native desktop app.

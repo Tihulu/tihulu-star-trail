@@ -78,18 +78,21 @@ def test_selected_group_render_only_uses_the_chosen_group(tmp_path: Path, monkey
 def test_selected_group_timelapse_only_uses_the_chosen_group(tmp_path: Path, monkeypatch) -> None:
     selected = EditableGroup("chosen", [assigned_photo(tmp_path / "chosen.jpg")])
     seen: list[list[str]] = []
+    received_max_sides: list[object] = []
 
-    def fake_timelapses(groups, output, **_kwargs):
+    def fake_timelapses(groups, output, **kwargs):
         seen.append([group.name for group in groups])
+        received_max_sides.append(kwargs["max_side"])
         return [output / "chosen_timelapse.mp4"]
 
     monkeypatch.setattr(engine, "render_group_timelapses", fake_timelapses)
     result = engine.render_selected_group(
         selected,
-        {"output": str(tmp_path / "output")},
+        {"output": str(tmp_path / "output"), "video_max_side": 0},
         trail=False,
         timelapse=True,
     )
 
     assert seen == [[selected.name]]
+    assert received_max_sides == [None]
     assert result["timelapses"] == [str(tmp_path / "output" / "timelapses" / "chosen_timelapse.mp4")]
