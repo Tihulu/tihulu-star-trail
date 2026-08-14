@@ -45,7 +45,9 @@ const selectionModeButton = document.querySelector("#selectionModeButton");
 const selectAllButton = document.querySelector("#selectAllButton");
 const clearSelectionButton = document.querySelector("#clearSelectionButton");
 const sortNameButton = document.querySelector("#sortNameButton");
+const sortNameDescButton = document.querySelector("#sortNameDescButton");
 const sortDateButton = document.querySelector("#sortDateButton");
+const sortDateDescButton = document.querySelector("#sortDateDescButton");
 const removeSelectedButton = document.querySelector("#removeSelectedButton");
 const photoStrip = document.querySelector("#photoStrip");
 
@@ -515,8 +517,16 @@ sortNameButton?.addEventListener("click", () => {
   void sortActiveGroup("name");
 });
 
+sortNameDescButton?.addEventListener("click", () => {
+  void sortActiveGroup("name", true);
+});
+
 sortDateButton?.addEventListener("click", () => {
   void sortActiveGroup("date");
+});
+
+sortDateDescButton?.addEventListener("click", () => {
+  void sortActiveGroup("date", true);
 });
 
 removeSelectedButton?.addEventListener("click", async () => {
@@ -1107,7 +1117,7 @@ function clearSelectedPhotos() {
   renderSelectionControls();
 }
 
-async function sortActiveGroup(mode) {
+async function sortActiveGroup(mode, descending = false) {
   let group = activeGroup();
   if (!group) {
     if (!files.length) return;
@@ -1121,16 +1131,16 @@ async function sortActiveGroup(mode) {
     const entries = group.files.map((file, index) => ({file, score: group.scores[index] ?? 1, index}));
     if (mode === "date") {
       await Promise.all(entries.map(async (entry) => { entry.time = await captureTime(entry.file); }));
-      entries.sort((a, b) => compareCaptureTime(a.time, b.time, a.file, b.file));
+      entries.sort((a, b) => (descending ? -1 : 1) * compareCaptureTime(a.time, b.time, a.file, b.file));
     } else {
-      entries.sort((a, b) => a.file.name.localeCompare(b.file.name, undefined, {numeric: true, sensitivity: "base"}) || a.index - b.index);
+      entries.sort((a, b) => (descending ? -1 : 1) * (a.file.name.localeCompare(b.file.name, undefined, {numeric: true, sensitivity: "base"}) || a.index - b.index));
     }
     pushUndo(`sort ${mode}`);
     group.files = entries.map((entry) => entry.file);
     group.scores = entries.map((entry) => entry.score);
     selectedPhotoIndex = 0;
     selectedPhotoKeys.clear();
-    refreshGroupsAfterEdit(`Sorted ${groupLabel(selectedGroup)} by ${mode}. This is now the timelapse frame order.`);
+    refreshGroupsAfterEdit(`Sorted ${groupLabel(selectedGroup)} by ${mode} (${descending ? "descending" : "ascending"}). This is now the timelapse frame order.`);
     await previewCurrentPhoto();
   } finally {
     setBusy(false);
@@ -1411,7 +1421,9 @@ function renderSelectionControls() {
   clearSelectionButton.disabled = isBusy || !selectedCountValue;
   removeSelectedButton.disabled = isBusy || !selectedCountValue;
   if (sortNameButton) sortNameButton.disabled = isBusy || activeFiles().length < 2;
+  if (sortNameDescButton) sortNameDescButton.disabled = isBusy || activeFiles().length < 2;
   if (sortDateButton) sortDateButton.disabled = isBusy || activeFiles().length < 2;
+  if (sortDateDescButton) sortDateDescButton.disabled = isBusy || activeFiles().length < 2;
 }
 
 function renderPhotoStrip() {
@@ -1784,19 +1796,24 @@ async function renderTimelapse(selected, options) {
   let frameCount = 0;
   const frameDuration = 1000 / options.fps;
   const startedAt = performance.now();
-  for (let index = firstFrame.index; index < selected.length; index += 1) {
-    log(`[${index + 1}/${selected.length}] recording ${selected[index].name}`);
-    let bitmap;
-    if (index === firstFrame.index) {
-      bitmap = firstFrame.bitmap;
-    } else {
-      try {
-        bitmap = await decode(selected[index]);
-      } catch (error) {
-        log(`[skip] ${selected[index].name}: ${decodeErrorMessage(error)}`);
-        continue;
-      }
+  let index = firstFrame.index;
+  let bitmap = firstFrame.bitmap;
+  let nextFrame = null;
+  const decodeNext = (nextIndex) => nextIndex < selected.length
+    ? decode(selected[nextIndex]).catch((error) => {
+      log(`[skip] ${selected[nextIndex].name}: ${decodeErrorMessage(error)}`);
+      return null;
+    })
+    : null;
+  nextFrame = decodeNext(index + 1);
+  while (index < selected.length) {
+    if (!bitmap) {
+      index += 1;
+      bitmap = nextFrame ? await nextFrame : null;
+      nextFrame = decodeNext(index + 1);
+      continue;
     }
+    log(`[${index + 1}/${selected.length}] recording ${selected[index].name}`);
     ctx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
     ctx.drawImage(bitmap, 0, 0, previewCanvas.width, previewCanvas.height);
     bitmap.close?.();
@@ -1804,6 +1821,9 @@ async function renderTimelapse(selected, options) {
     // Decode time used to be added to every frame delay, making output slower
     // than the requested FPS. Pace against the intended timeline instead.
     await delay(Math.max(0, startedAt + frameCount * frameDuration - performance.now()));
+    index += 1;
+    bitmap = nextFrame ? await nextFrame : null;
+    nextFrame = decodeNext(index + 1);
   }
   recorder.stop();
   await done;

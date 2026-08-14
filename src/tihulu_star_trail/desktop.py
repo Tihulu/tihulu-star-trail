@@ -707,15 +707,19 @@ class TihuluDesktopApp:
             command=self.remove_selected_photos,
             style="Danger.Compact.TButton",
         )
-        self.sort_name_button = self.ttk.Button(self.photo_action_frame, text="Sort Name", command=lambda: self.sort_selected_photos("name"), style="Compact.TButton")
-        self.sort_date_button = self.ttk.Button(self.photo_action_frame, text="Sort Date", command=lambda: self.sort_selected_photos("date"), style="Compact.TButton")
+        self.sort_name_button = self.ttk.Button(self.photo_action_frame, text="Name A–Z", command=lambda: self.sort_selected_photos("name"), style="Compact.TButton")
+        self.sort_name_desc_button = self.ttk.Button(self.photo_action_frame, text="Name Z–A", command=lambda: self.sort_selected_photos("name", reverse=True), style="Compact.TButton")
+        self.sort_date_button = self.ttk.Button(self.photo_action_frame, text="Date ↑", command=lambda: self.sort_selected_photos("date"), style="Compact.TButton")
+        self.sort_date_desc_button = self.ttk.Button(self.photo_action_frame, text="Date ↓", command=lambda: self.sort_selected_photos("date", reverse=True), style="Compact.TButton")
         self.photo_action_buttons = [
             self.move_photos_button,
             self.select_all_button,
             self.clear_selection_button,
             self.remove_photos_button,
             self.sort_name_button,
+            self.sort_name_desc_button,
             self.sort_date_button,
+            self.sort_date_desc_button,
         ]
         self._layout_photo_actions(430)
         self.ttk.Label(
@@ -1400,7 +1404,12 @@ class TihuluDesktopApp:
         is_shift = bool(event.state & 0x0001)
         # Ctrl on Linux/Windows and Command (Mod1/Mod2) on macOS.
         is_toggle = bool(event.state & (0x0004 | 0x0008 | 0x0010))
-        if is_shift and self._photo_selection_anchor is not None:
+        # A press on an already selected card begins a block drag. Do not
+        # collapse the existing multi-selection before motion is detected.
+        preserve_block = index in self.selected_photo_indices and len(self.selected_photo_indices) > 1
+        if preserve_block and not is_shift and not is_toggle:
+            pass
+        elif is_shift and self._photo_selection_anchor is not None:
             first = min(self._photo_selection_anchor, index)
             last = max(self._photo_selection_anchor, index)
             selected_range = set(range(first, last + 1))
@@ -1633,14 +1642,15 @@ class TihuluDesktopApp:
         self.workspace.move_photos(self.selected_group, selected, target)
         self._render_workspace()
 
-    def sort_selected_photos(self, mode: str) -> None:
+    def sort_selected_photos(self, mode: str, *, reverse: bool = False) -> None:
         if not self.workspace.groups:
             return
-        self.workspace.sort_photos(self.selected_group, mode)
+        self.workspace.sort_photos(self.selected_group, mode, reverse=reverse)
         self.current_photo_index = 0
         self.selected_photo_indices = set()
         self._render_photos()
-        self._append_log(f"Sorted {self.workspace.groups[self.selected_group].name} by {mode}; this is now the timelapse order.")
+        direction = "descending" if reverse else "ascending"
+        self._append_log(f"Sorted {self.workspace.groups[self.selected_group].name} by {mode} ({direction}); this is now the timelapse order.")
 
     def remove_selected_photos(self) -> None:
         selected = sorted(self.selected_photo_indices)

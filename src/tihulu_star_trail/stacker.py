@@ -398,6 +398,8 @@ def _apply_video_bitrate(
         "-an",
         "-c:v",
         codec,
+        "-preset",
+        "veryfast",
         "-b:v",
         f"{max(float(bitrate_mbps), 0.1):g}M",
         str(output),
