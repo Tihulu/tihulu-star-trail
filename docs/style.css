@@ -655,6 +655,16 @@ button:disabled {
   opacity: 0.58;
 }
 
+.photo-thumb.reorder-before {
+  border-left: 4px solid var(--yellow);
+  box-shadow: -8px 0 18px rgba(245, 242, 92, 0.28);
+}
+
+.photo-thumb.reorder-after {
+  border-right: 4px solid var(--yellow);
+  box-shadow: 8px 0 18px rgba(245, 242, 92, 0.28);
+}
+
 .photo-thumb img {
   width: 100%;
   aspect-ratio: 1;
@@ -679,6 +689,15 @@ button:disabled {
   color: var(--muted);
   font-weight: 800;
   padding: 12px;
+}
+
+.photo-strip-hint {
+  color: var(--muted);
+  font-size: 0.74rem;
+  font-weight: 800;
+  line-height: 1.4;
+  margin: 0;
+  padding: 0 12px 12px;
 }
 
 .groups-panel {

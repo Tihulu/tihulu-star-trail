@@ -1347,6 +1347,15 @@ function renderPhotoStrip() {
     button.addEventListener("dragstart", (event) => {
       handlePhotoDragStart(event, index, file);
     });
+    button.addEventListener("dragover", (event) => {
+      handlePhotoReorderOver(event, index);
+    });
+    button.addEventListener("dragleave", (event) => {
+      event.currentTarget.classList.remove("reorder-before", "reorder-after");
+    });
+    button.addEventListener("drop", async (event) => {
+      await handlePhotoReorderDrop(event, index);
+    });
     button.addEventListener("dragend", () => {
       handlePhotoDragEnd();
     });
@@ -1417,6 +1426,7 @@ function handlePhotoDragStart(event, index, file) {
   selectedPhotoKeys = new Set(keys);
   selectedPhotoIndex = index;
   dragPayload = {sourceGroup: selectedGroup, keys};
+  suppressPhotoClick = true;
   event.dataTransfer.effectAllowed = "move";
   event.dataTransfer.setData("text/plain", `${keys.length} photo(s)`);
   event.currentTarget.classList.add("dragging");
@@ -1424,14 +1434,79 @@ function handlePhotoDragStart(event, index, file) {
   renderSelectionControls();
 }
 
+function handlePhotoReorderOver(event, targetIndex) {
+  if (!canReorderPhotos(targetIndex)) return;
+  event.preventDefault();
+  event.stopPropagation();
+  event.dataTransfer.dropEffect = "move";
+  const target = event.currentTarget;
+  const rect = target.getBoundingClientRect();
+  const placeAfter = event.clientX >= rect.left + rect.width / 2;
+  target.classList.toggle("reorder-before", !placeAfter);
+  target.classList.toggle("reorder-after", placeAfter);
+}
+
+async function handlePhotoReorderDrop(event, targetIndex) {
+  if (!canReorderPhotos(targetIndex)) return;
+  event.preventDefault();
+  event.stopPropagation();
+  const payload = dragPayload;
+  const target = event.currentTarget;
+  const rect = target.getBoundingClientRect();
+  const placeAfter = event.clientX >= rect.left + rect.width / 2;
+  target.classList.remove("reorder-before", "reorder-after");
+  await reorderPhotosWithinGroup(payload.sourceGroup, payload.keys, targetIndex, placeAfter);
+}
+
+function canReorderPhotos(targetIndex) {
+  return Boolean(
+    dragPayload
+    && !isBusy
+    && dragPayload.sourceGroup === selectedGroup
+    && groups[selectedGroup]
+    && Number.isInteger(targetIndex)
+    && groups[selectedGroup].files[targetIndex]
+  );
+}
+
+async function reorderPhotosWithinGroup(groupIndex, keys, targetIndex, placeAfter) {
+  const group = groups[groupIndex];
+  if (!group || !keys.length || !group.files[targetIndex]) return;
+  const keySet = new Set(keys);
+  const targetFile = group.files[targetIndex];
+  if (keySet.has(fileKey(targetFile))) return;
+
+  const currentFile = group.files[selectedPhotoIndex] || null;
+  const reordered = TihuluPhotoOrder.reorderEntries(
+    group.files,
+    group.scores,
+    keys,
+    targetIndex,
+    placeAfter,
+    fileKey
+  );
+  if (!reordered.changed) return;
+
+  pushUndo(`reorder ${keys.length} photo(s)`);
+  group.files = reordered.files;
+  group.scores = reordered.scores;
+  selectedPhotoIndex = currentFile ? Math.max(0, group.files.indexOf(currentFile)) : 0;
+  dragPayload = null;
+  refreshGroupsAfterEdit(`Reordered ${keys.length} photo(s) in ${groupLabel(groupIndex)}. This is now the timelapse frame order.`);
+  await previewCurrentPhoto();
+}
+
 function handlePhotoDragEnd() {
   dragPayload = null;
-  for (const button of photoStrip.querySelectorAll(".photo-thumb.dragging")) {
-    button.classList.remove("dragging");
+  for (const button of photoStrip.querySelectorAll(".photo-thumb.dragging, .photo-thumb.reorder-before, .photo-thumb.reorder-after")) {
+    button.classList.remove("dragging", "reorder-before", "reorder-after");
   }
   for (const card of groupsPanel.querySelectorAll(".drop-target, .reorder-target")) {
     card.classList.remove("drop-target", "reorder-target");
   }
+  window.setTimeout(() => {
+    suppressPhotoClick = false;
+  }, 50);
 }
 
 function syncPhotoStripSelection() {

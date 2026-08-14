@@ -15,7 +15,7 @@ The grouping step uses OpenCV feature matching and a RANSAC homography check. In
 - Recursively scans an SD card or photo folder.
 - Opens a native Debian/Pop!_OS desktop app with `tihulu desktop`.
 - Opens the same native feature set as a macOS `.app`, including RAW processing, manual group review, previews, and timelapse playback.
-- Gives the native desktop app a manual group review workspace with draggable panel dividers, mouse-wheel scrolling, responsive compact controls, optional lazy-loaded group thumbnails, a responsive photo grid or lightweight filename-only list, an Edit mode for click-by-click multi-selection, visible selection states, drag-to-group photo moves, group creation/renaming/reordering, 50-step undo, RAW-capable previews, edited-group export, and trail/timelapse export for only the selected group.
+- Gives the native desktop app a manual group review workspace with draggable panel dividers, mouse-wheel scrolling, responsive compact controls, optional lazy-loaded group thumbnails, a responsive photo grid or lightweight filename-only list, an Edit mode for click-by-click multi-selection, visible selection states, drag-to-reorder timelapse frames (including multi-photo blocks), drag-to-group photo moves, group creation/renaming/reordering, 50-step undo, RAW-capable previews, edited-group export, and trail/timelapse export for only the selected group.
 - Lets native desktop timelapse export keep the photos' original resolution when **Keep Original Video Size** is selected.
 
 The same desktop review workspace is included in every native installation path: macOS DMG, macOS installer, Linux AppImage, and Debian/Pop!_OS installer.
@@ -26,7 +26,7 @@ The same desktop review workspace is included in every native installation path:
 - Groups images by likely camera angle.
 - Optionally uses EXIF capture time or file modified time to keep different sessions apart.
 - Ignores hidden dot files such as `.DS_Store` or `._IMG_0001.JPG`.
-- Lets the hosted web app browse every photo inside a group, multi-select thumbnails, drag selected photos between groups, drag group cards to reorder groups, drop photos into a new group, use arrow-key navigation, rename groups, add groups, undo manual edits, move photos between groups, create a new group, or remove photos from the working set.
+- Lets the hosted web app browse every photo inside a group, multi-select thumbnails, drag-reorder one or several photos to set the timelapse frame sequence, drag selected photos between groups, drag group cards to reorder groups, drop photos into a new group, use arrow-key navigation, rename groups, add groups, undo manual edits, move photos between groups, create a new group, or remove photos from the working set.
 - Provides a built-in parameter guide for threshold, preview size, export size, image/video formats and quality, FPS, and time metadata windows.
 - Opens completed hosted-web timelapse exports in an in-page video player with native replay and seek controls.
 - Lets hosted-web users type a custom download filename before saving trail images or timelapse videos.

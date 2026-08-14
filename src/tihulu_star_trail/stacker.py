@@ -107,10 +107,11 @@ def render_timelapse(
     max_side: int | None = 1920,
     bitrate_mbps: float | None = None,
     progress: Progress | None = None,
+    preserve_order: bool = False,
 ) -> Path:
     import cv2
 
-    ordered_paths = sort_images_by_time(list(paths))
+    ordered_paths = _timelapse_paths(paths, preserve_order=preserve_order)
     if not ordered_paths:
         raise ValueError("No images were provided for timelapse rendering.")
     if fps <= 0:
@@ -163,6 +164,11 @@ def render_timelapse(
     return output_path
 
 
+def _timelapse_paths(paths: Iterable[Path], *, preserve_order: bool) -> list[Path]:
+    supplied_paths = list(paths)
+    return supplied_paths if preserve_order else sort_images_by_time(supplied_paths)
+
+
 def render_group_trails(
     groups: list[AngleGroup],
     output_dir: Path,
@@ -207,6 +213,7 @@ def render_group_timelapses(
     video_format: str = "mp4",
     bitrate_mbps: float | None = None,
     progress: Progress | None = None,
+    preserve_order: bool = False,
 ) -> list[Path]:
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -230,6 +237,7 @@ def render_group_timelapses(
                 max_side=max_side,
                 bitrate_mbps=bitrate_mbps,
                 progress=progress,
+                preserve_order=preserve_order,
             )
         )
     return rendered

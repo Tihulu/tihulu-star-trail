@@ -28,6 +28,8 @@ jobs:
         run: |
           node --check src/tihulu_star_trail/web/app.js
           node --check docs/app.js
+          node --check docs/photo-order.js
+          node tests/web-photo-order.test.js
 
       - name: Check desktop dependencies
         run: |

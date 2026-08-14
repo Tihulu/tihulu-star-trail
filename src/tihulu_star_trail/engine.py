@@ -86,6 +86,7 @@ def export_groups(
             video_format=str(payload.get("video_extension", "mp4")),
             bitrate_mbps=_optional_float(payload.get("video_quality_mbps")),
             progress=progress,
+            preserve_order=True,
         )
         result["timelapses"] = [str(path) for path in videos]
     return result
@@ -129,6 +130,7 @@ def render_selected_group(
             video_format=str(payload.get("video_extension", "mp4")),
             bitrate_mbps=_optional_float(payload.get("video_quality_mbps")),
             progress=progress,
+            preserve_order=True,
         )
         result["timelapses"] = [str(path) for path in videos]
     return result
