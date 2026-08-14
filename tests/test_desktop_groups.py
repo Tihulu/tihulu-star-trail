@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from tihulu_star_trail.desktop_groups import EditableGroup, GroupWorkspace, assigned_photo
+from tihulu_star_trail import engine
 from tihulu_star_trail.engine import export_groups
 
 
@@ -50,3 +51,45 @@ def test_editable_groups_can_be_exported_to_a_manifest(tmp_path: Path) -> None:
 
     assert result["groups"] == 1
     assert Path(result["manifest"]).exists()
+
+
+def test_selected_group_render_only_uses_the_chosen_group(tmp_path: Path, monkeypatch) -> None:
+    selected = EditableGroup("chosen", [assigned_photo(tmp_path / "chosen.jpg")])
+    other = EditableGroup("other", [assigned_photo(tmp_path / "other.jpg")])
+    seen: list[list[str]] = []
+
+    def fake_trails(groups, output, **_kwargs):
+        seen.append([group.name for group in groups])
+        return [output / "chosen_star_trail.jpg"]
+
+    monkeypatch.setattr(engine, "render_group_trails", fake_trails)
+    result = engine.render_selected_group(
+        selected,
+        {"output": str(tmp_path / "output")},
+        trail=True,
+        timelapse=False,
+    )
+
+    assert seen == [[selected.name]]
+    assert other.name not in seen[0]
+    assert result["trails"] == [str(tmp_path / "output" / "trails" / "chosen_star_trail.jpg")]
+
+
+def test_selected_group_timelapse_only_uses_the_chosen_group(tmp_path: Path, monkeypatch) -> None:
+    selected = EditableGroup("chosen", [assigned_photo(tmp_path / "chosen.jpg")])
+    seen: list[list[str]] = []
+
+    def fake_timelapses(groups, output, **_kwargs):
+        seen.append([group.name for group in groups])
+        return [output / "chosen_timelapse.mp4"]
+
+    monkeypatch.setattr(engine, "render_group_timelapses", fake_timelapses)
+    result = engine.render_selected_group(
+        selected,
+        {"output": str(tmp_path / "output")},
+        trail=False,
+        timelapse=True,
+    )
+
+    assert seen == [[selected.name]]
+    assert result["timelapses"] == [str(tmp_path / "output" / "timelapses" / "chosen_timelapse.mp4")]

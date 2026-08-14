@@ -17,7 +17,7 @@ from .defaults import (
     DEFAULT_TIME_WINDOW_HOURS,
 )
 from .desktop_groups import GroupWorkspace
-from .engine import analyze_groups, execute_action, export_groups, scan_images
+from .engine import analyze_groups, execute_action, export_groups, render_selected_group, scan_images
 from .images import read_bgr
 
 TK_HINT = (
@@ -84,6 +84,10 @@ class TihuluDesktopApp:
         self.output_preview_image: Any = None
         self.last_outputs: list[Path] = []
         self._drag_group_index: int | None = None
+        self._drag_photo_indices: set[int] = set()
+        self.selected_photo_indices: set[int] = set()
+        self.thumbnail_images: list[Any] = []
+        self.photo_tiles: list[Any] = []
         self._video_capture: Any = None
         self._video_after: str | None = None
         self._video_playing = False
@@ -378,6 +382,15 @@ class TihuluDesktopApp:
         self.ttk.Button(groups_panel, text="Rename", command=self.rename_group).grid(row=2, column=1, sticky="ew", pady=(8, 0), padx=4)
         self.ttk.Button(groups_panel, text="↑", command=lambda: self.reorder_group(-1)).grid(row=2, column=2, sticky="ew", pady=(8, 0), padx=4)
         self.ttk.Button(groups_panel, text="↓", command=lambda: self.reorder_group(1)).grid(row=2, column=3, sticky="ew", pady=(8, 0), padx=(4, 0))
+        self.selected_trail_button = self.ttk.Button(
+            groups_panel, text="Trail This Group", command=lambda: self.export_selected_group("trail")
+        )
+        self.selected_timelapse_button = self.ttk.Button(
+            groups_panel, text="Timelapse This Group", command=lambda: self.export_selected_group("timelapse")
+        )
+        self.selected_trail_button.grid(row=3, column=0, columnspan=2, sticky="ew", pady=(8, 0), padx=(0, 4))
+        self.selected_timelapse_button.grid(row=3, column=2, columnspan=2, sticky="ew", pady=(8, 0), padx=(4, 0))
+        self.controls.extend([self.selected_trail_button, self.selected_timelapse_button])
 
         preview_panel = self._panel(parent, 0, 1, "Photo Preview")
         preview_panel.rowconfigure(1, weight=1)
@@ -393,23 +406,35 @@ class TihuluDesktopApp:
         photos_panel = self._panel(parent, 0, 2, "Group Photos")
         photos_panel.rowconfigure(1, weight=1)
         photos_panel.columnconfigure(0, weight=1)
-        self.photo_list = self.tk.Listbox(
+        self.photo_canvas = self.tk.Canvas(
             photos_panel,
             bg=FIELD,
-            fg=TEXT,
-            selectbackground=CYAN,
-            selectforeground="#02040a",
-            exportselection=False,
-            selectmode="extended",
-            activestyle="none",
+            highlightthickness=1,
+            highlightbackground=LINE,
+            bd=0,
         )
-        self.photo_list.grid(row=1, column=0, columnspan=2, sticky="nsew")
-        self.photo_list.bind("<<ListboxSelect>>", self._on_photo_selected)
+        self.photo_scrollbar = self.ttk.Scrollbar(
+            photos_panel, orient="vertical", command=self.photo_canvas.yview
+        )
+        self.photo_canvas.configure(yscrollcommand=self.photo_scrollbar.set)
+        self.photo_canvas.grid(row=1, column=0, sticky="nsew")
+        self.photo_scrollbar.grid(row=1, column=1, sticky="ns")
+        self.photo_grid = self.tk.Frame(self.photo_canvas, bg=FIELD)
+        self.photo_grid_window = self.photo_canvas.create_window(
+            (0, 0), window=self.photo_grid, anchor="nw"
+        )
+        self.photo_grid.bind("<Configure>", self._sync_photo_grid_scroll)
+        self.photo_canvas.bind("<Configure>", self._fit_photo_grid)
         self.target_group = self.ttk.Combobox(photos_panel, state="readonly")
         self.target_group.grid(row=2, column=0, sticky="ew", pady=(8, 0), padx=(0, 4))
         self.ttk.Button(photos_panel, text="Move Selected", command=self.move_selected_photos).grid(row=2, column=1, sticky="ew", pady=(8, 0), padx=(4, 0))
         self.ttk.Button(photos_panel, text="Select All", command=self.select_all_photos).grid(row=3, column=0, sticky="ew", pady=(8, 0), padx=(0, 4))
         self.ttk.Button(photos_panel, text="Remove Selected", command=self.remove_selected_photos, style="Danger.TButton").grid(row=3, column=1, sticky="ew", pady=(8, 0), padx=(4, 0))
+        self.ttk.Label(
+            photos_panel,
+            text="Click cards to select. Drag selected cards onto a group to move them.",
+            wraplength=250,
+        ).grid(row=4, column=0, columnspan=2, sticky="ew", pady=(8, 0))
 
         self.root.bind("<Left>", lambda _event: self.navigate_photo(-1))
         self.root.bind("<Right>", lambda _event: self.navigate_photo(1))
@@ -441,11 +466,6 @@ class TihuluDesktopApp:
         self.selected_group = int(selected[0])
         self._render_photos()
 
-    def _on_photo_selected(self, _event: Any = None) -> None:
-        selected = self.photo_list.curselection()
-        if selected:
-            self._show_photo(int(selected[0]), preserve_selection=True)
-
     def _render_workspace(self) -> None:
         self.group_list.delete(0, "end")
         for group in self.workspace.groups:
@@ -459,20 +479,102 @@ class TihuluDesktopApp:
         self._render_photos()
 
     def _render_photos(self) -> None:
-        self.photo_list.delete(0, "end")
+        for child in self.photo_grid.winfo_children():
+            child.destroy()
+        self.thumbnail_images = []
+        self.photo_tiles = []
+        self.selected_photo_indices = set()
         if not self.workspace.groups:
             self.photo_preview.configure(image="", text="Analyze groups to review photos.")
             self.photo_name.configure(text="")
             return
         group = self.workspace.groups[self.selected_group]
-        for photo in group.photos:
-            self.photo_list.insert("end", photo.path.name)
         if group.photos:
-            self.photo_list.selection_set(0)
-            self._show_photo(0)
+            self.selected_photo_indices = {0}
+            for index, photo in enumerate(group.photos):
+                tile = self._photo_tile(photo.path, index)
+                self.photo_tiles.append(tile)
+                row, column = divmod(index, 3)
+                tile.grid(row=row, column=column, sticky="nsew", padx=4, pady=4)
+                self.photo_grid.columnconfigure(column, weight=1)
+            self._show_photo(0, preserve_selection=True)
         else:
             self.photo_preview.configure(image="", text="This group is empty.")
             self.photo_name.configure(text="")
+
+    def _photo_tile(self, path: Path, index: int) -> Any:
+        try:
+            image = self._photo_image(path, (116, 92))
+        except Exception:
+            image = None
+        else:
+            self.thumbnail_images.append(image)
+        tile = self.tk.Label(
+            self.photo_grid,
+            image=image,
+            text=path.name,
+            compound="top",
+            width=16,
+            height=8 if image is not None else 6,
+            wraplength=116,
+            justify="center",
+            bg=CYAN if index in self.selected_photo_indices else PANEL_STRONG,
+            fg="#02040a" if index in self.selected_photo_indices else TEXT,
+            cursor="hand2",
+            padx=4,
+            pady=4,
+            relief="flat",
+        )
+        tile.bind("<ButtonPress-1>", lambda event, item=index: self._photo_drag_start(event, item))
+        tile.bind("<B1-Motion>", self._photo_drag_motion)
+        tile.bind("<ButtonRelease-1>", self._photo_drop)
+        return tile
+
+    def _sync_photo_grid_scroll(self, _event: Any = None) -> None:
+        self.photo_canvas.configure(scrollregion=self.photo_canvas.bbox("all"))
+
+    def _fit_photo_grid(self, event: Any) -> None:
+        self.photo_canvas.itemconfigure(self.photo_grid_window, width=event.width)
+
+    def _refresh_photo_tile_selection(self) -> None:
+        for index, tile in enumerate(self.photo_tiles):
+            selected = index in self.selected_photo_indices
+            tile.configure(
+                bg=CYAN if selected else PANEL_STRONG,
+                fg="#02040a" if selected else TEXT,
+            )
+
+    def _photo_drag_start(self, event: Any, index: int) -> None:
+        if index not in self.selected_photo_indices:
+            if event.state & 0x0004:
+                self.selected_photo_indices.add(index)
+            else:
+                self.selected_photo_indices = {index}
+            self._refresh_photo_tile_selection()
+            self._show_photo(index, preserve_selection=True)
+        self._drag_photo_indices = set(self.selected_photo_indices)
+
+    def _photo_drag_motion(self, _event: Any) -> None:
+        if self._drag_photo_indices:
+            self.root.configure(cursor="fleur")
+
+    def _photo_drop(self, event: Any) -> None:
+        self.root.configure(cursor="")
+        moving = sorted(self._drag_photo_indices)
+        self._drag_photo_indices = set()
+        if not moving or not self.workspace.groups:
+            return
+        target_widget = self.root.winfo_containing(event.x_root, event.y_root)
+        while target_widget is not None and target_widget != self.group_list:
+            target_widget = target_widget.master
+        if target_widget != self.group_list:
+            return
+        target = self.group_list.nearest(event.y_root - self.group_list.winfo_rooty())
+        if target < 0 or target == self.selected_group:
+            return
+        self.workspace.move_photos(self.selected_group, moving, target)
+        self.selected_group = target
+        self._render_workspace()
 
     def _show_photo(self, index: int, preserve_selection: bool = False) -> None:
         if not self.workspace.groups:
@@ -489,9 +591,8 @@ class TihuluDesktopApp:
             self.photo_preview.configure(image=self.preview_image, text="")
         self.photo_name.configure(text=f"{index + 1} / {len(photos)} — {photos[index].path.name}")
         if not preserve_selection:
-            self.photo_list.selection_clear(0, "end")
-            self.photo_list.selection_set(index)
-        self.photo_list.see(index)
+            self.selected_photo_indices = {index}
+            self._refresh_photo_tile_selection()
 
     def _photo_image(self, path: Path, bounds: tuple[int, int]) -> Any:
         import cv2
@@ -506,8 +607,7 @@ class TihuluDesktopApp:
     def navigate_photo(self, offset: int) -> None:
         if not self.workspace.groups or not self.workspace.groups[self.selected_group].photos:
             return
-        selected = self.photo_list.curselection()
-        current = int(selected[0]) if selected else 0
+        current = min(self.selected_photo_indices) if self.selected_photo_indices else 0
         self._show_photo((current + offset) % len(self.workspace.groups[self.selected_group].photos))
 
     def add_group(self) -> None:
@@ -536,11 +636,12 @@ class TihuluDesktopApp:
         self._render_workspace()
 
     def select_all_photos(self) -> None:
-        if self.photo_list.size():
-            self.photo_list.selection_set(0, "end")
+        if self.workspace.groups:
+            self.selected_photo_indices = set(range(len(self.workspace.groups[self.selected_group].photos)))
+            self._refresh_photo_tile_selection()
 
     def move_selected_photos(self) -> None:
-        selected = [int(index) for index in self.photo_list.curselection()]
+        selected = sorted(self.selected_photo_indices)
         target = self.target_group.current()
         if not selected or target < 0 or target == self.selected_group:
             return
@@ -548,7 +649,7 @@ class TihuluDesktopApp:
         self._render_workspace()
 
     def remove_selected_photos(self) -> None:
-        selected = [int(index) for index in self.photo_list.curselection()]
+        selected = sorted(self.selected_photo_indices)
         if not selected:
             return
         self.workspace.remove_photos(self.selected_group, selected)
@@ -584,6 +685,12 @@ class TihuluDesktopApp:
             return
         self._start_worker("export")
 
+    def export_selected_group(self, media: str) -> None:
+        if not self.workspace.groups or not self.workspace.groups[self.selected_group].photos:
+            self._show_error("Select a non-empty group before exporting.")
+            return
+        self._start_worker(f"selected-{media}")
+
     def run(self) -> None:
         self._start_worker("run")
 
@@ -618,8 +725,14 @@ class TihuluDesktopApp:
             "scan": self._scan_worker,
             "analyze": self._analyze_worker,
             "export": self._export_worker,
+            "selected-trail": self._selected_group_worker,
+            "selected-timelapse": self._selected_group_worker,
         }.get(mode, self._run_worker)
-        self.worker = threading.Thread(target=target, args=(payload,), daemon=True)
+        args: tuple[Any, ...] = (payload,)
+        if mode.startswith("selected-"):
+            group = self.workspace.groups[self.selected_group]
+            args = (payload, GroupWorkspace([group]).nonempty_groups()[0], mode)
+        self.worker = threading.Thread(target=target, args=args, daemon=True)
         self.worker.start()
 
     def _scan_worker(self, payload: dict[str, Any]) -> None:
@@ -650,6 +763,20 @@ class TihuluDesktopApp:
         groups = self.workspace.nonempty_groups()
         try:
             result = export_groups(groups, payload, progress=lambda message: self.events.put(("log", message)))
+        except Exception as error:
+            self.events.put(("error", error))
+        else:
+            self.events.put(("result", result))
+
+    def _selected_group_worker(self, payload: dict[str, Any], group: Any, mode: str) -> None:
+        try:
+            result = render_selected_group(
+                group,
+                payload,
+                trail=mode == "selected-trail",
+                timelapse=mode == "selected-timelapse",
+                progress=lambda message: self.events.put(("log", message)),
+            )
         except Exception as error:
             self.events.put(("error", error))
         else:
