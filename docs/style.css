@@ -246,6 +246,11 @@ h2 {
   color: var(--yellow);
 }
 
+.grid-note {
+  grid-column: 1 / -1;
+  margin: -4px 0 0;
+}
+
 .check-field {
   min-height: 42px;
   display: flex;
@@ -290,6 +295,26 @@ input:focus,
 select:focus {
   border-color: var(--pink);
   box-shadow: 0 0 0 3px rgba(255, 43, 214, 0.16);
+}
+
+.field.disabled-field span {
+  color: #526170;
+}
+
+input:disabled,
+select:disabled {
+  border-color: rgba(82, 97, 112, 0.3);
+  background: #111722;
+  color: #526170;
+  cursor: not-allowed;
+  opacity: 1;
+  -webkit-text-fill-color: #526170;
+}
+
+input:disabled:focus,
+select:disabled:focus {
+  border-color: rgba(82, 97, 112, 0.3);
+  box-shadow: none;
 }
 
 button,

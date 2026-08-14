@@ -130,13 +130,17 @@ function setBusy(busy) {
 
 function updateOutputSizeControls() {
   if (maxSideInput && keepOriginalSizeToggle) {
-    maxSideInput.disabled = keepOriginalSizeToggle.checked;
-    maxSideInput.setAttribute("aria-disabled", keepOriginalSizeToggle.checked ? "true" : "false");
+    setParameterDisabled(maxSideInput, keepOriginalSizeToggle.checked);
   }
   if (videoMaxSideInput && keepOriginalVideoSizeToggle) {
-    videoMaxSideInput.disabled = keepOriginalVideoSizeToggle.checked;
-    videoMaxSideInput.setAttribute("aria-disabled", keepOriginalVideoSizeToggle.checked ? "true" : "false");
+    setParameterDisabled(videoMaxSideInput, keepOriginalVideoSizeToggle.checked);
   }
+}
+
+function setParameterDisabled(input, disabled) {
+  input.disabled = disabled;
+  input.setAttribute("aria-disabled", disabled ? "true" : "false");
+  input.closest(".field")?.classList.toggle("disabled-field", disabled);
 }
 
 function setDownload(url, filename) {
