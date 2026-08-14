@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Tihulu Star Trail Web</title>
-    <link rel="stylesheet" href="style.css?v=20260814-photo-order-2">
+    <link rel="stylesheet" href="style.css?v=20260814-manual-sort-3">
   </head>
   <body>
     <canvas id="starfield" aria-hidden="true"></canvas>
@@ -66,7 +66,7 @@
               </div>
               <div>
                 <dt>Time Metadata</dt>
-                <dd>When enabled, photos outside the time window are less likely to land in the same group.</dd>
+                <dd>Uses camera EXIF capture time when available, otherwise file date. Photos without a usable time stay separate rather than being merged across unknown dates.</dd>
               </div>
               <div>
                 <dt>Time Window Hours</dt>
@@ -142,6 +142,7 @@
           </div>
 
           <div class="action-row">
+            <button class="ghost" id="manualReviewButton" type="button">Manual Review</button>
             <button class="ghost" id="analyzeButton" type="button">Analyze</button>
             <button class="ghost" id="trailButton" type="button">Trail Image</button>
             <button class="primary" id="timelapseButton" type="button">Timelapse Video</button>
@@ -225,6 +226,8 @@
               <button class="ghost compact-button" id="selectionModeButton" type="button">Edit</button>
               <button class="ghost compact-button" id="selectAllButton" type="button">Select All</button>
               <button class="ghost compact-button" id="clearSelectionButton" type="button">Clear</button>
+              <button class="ghost compact-button" id="sortNameButton" type="button">Sort Name</button>
+              <button class="ghost compact-button" id="sortDateButton" type="button">Sort Date</button>
               <button class="ghost compact-button danger" id="removeSelectedButton" type="button">Remove Selected</button>
             </div>
           </div>
@@ -236,6 +239,6 @@
       <section class="groups-panel" id="groupsPanel" aria-label="Detected groups"></section>
     </main>
     <script src="photo-order.js?v=20260814-photo-order-2"></script>
-    <script src="app.js?v=20260814-photo-order-2"></script>
+    <script src="app.js?v=20260814-manual-sort-3"></script>
   </body>
 </html>

@@ -18,9 +18,9 @@ from .defaults import (
     DEFAULT_TIME_METADATA,
     DEFAULT_TIME_WINDOW_HOURS,
 )
-from .desktop_groups import GroupWorkspace
+from .desktop_groups import EditableGroup, GroupWorkspace, assigned_photo
 from .engine import analyze_groups, execute_action, export_groups, render_selected_group, scan_images
-from .images import read_bgr
+from .images import list_images, read_bgr
 from .hardware import backend_status, detect_hardware_backend, normalize_hardware_mode
 from .thumbnail_cache import (
     LRUThumbnailCache,
@@ -473,15 +473,17 @@ class TihuluDesktopApp:
         frame.columnconfigure(0, weight=1)
         self.scan_button = self.ttk.Button(frame, text="Scan", command=self.scan)
         self.analyze_button = self.ttk.Button(frame, text="Analyze Groups", command=self.analyze)
+        self.manual_button = self.ttk.Button(frame, text="Manual Review", command=self.start_manual_review)
         self.export_button = self.ttk.Button(frame, text="Export Edited", command=self.export_edited)
         self.run_button = self.ttk.Button(frame, text="Run", command=self.run, style="Primary.TButton")
         self.open_button = self.ttk.Button(frame, text="Open Output", command=self.open_output)
         self.scan_button.grid(row=0, column=1, padx=(0, 8))
         self.analyze_button.grid(row=0, column=2, padx=(0, 8))
-        self.export_button.grid(row=0, column=3, padx=(0, 8))
-        self.open_button.grid(row=0, column=4, padx=(0, 8))
-        self.run_button.grid(row=0, column=5)
-        self.controls.extend([self.scan_button, self.analyze_button, self.export_button, self.run_button, self.open_button])
+        self.manual_button.grid(row=0, column=3, padx=(0, 8))
+        self.export_button.grid(row=0, column=4, padx=(0, 8))
+        self.open_button.grid(row=0, column=5, padx=(0, 8))
+        self.run_button.grid(row=0, column=6)
+        self.controls.extend([self.scan_button, self.analyze_button, self.manual_button, self.export_button, self.run_button, self.open_button])
 
     def _build_review_tab(self, parent: Any) -> None:
         parent.columnconfigure(0, weight=1)
@@ -640,7 +642,7 @@ class TihuluDesktopApp:
         self.hardware_combo.pack(side="left")
         self.hardware_combo.bind("<<ComboboxSelected>>", self._hardware_acceleration_changed)
         self._add_tooltip(self.photo_edit_button, "Select or deselect multiple photos with ordinary clicks.")
-        self._add_tooltip(self.photo_thumbs_button, "Show 120×90 photo thumbnails; turn off for filename-only mode.")
+        self._add_tooltip(self.photo_thumbs_button, "Show larger 180×135 photo thumbnails; turn off for filename-only mode.")
         self._add_tooltip(
             self.ram_cache_button,
             "Keeps up to 128 downscaled thumbnails (about 40 MB) for faster navigation. Turn off to reduce memory use.",
@@ -705,11 +707,15 @@ class TihuluDesktopApp:
             command=self.remove_selected_photos,
             style="Danger.Compact.TButton",
         )
+        self.sort_name_button = self.ttk.Button(self.photo_action_frame, text="Sort Name", command=lambda: self.sort_selected_photos("name"), style="Compact.TButton")
+        self.sort_date_button = self.ttk.Button(self.photo_action_frame, text="Sort Date", command=lambda: self.sort_selected_photos("date"), style="Compact.TButton")
         self.photo_action_buttons = [
             self.move_photos_button,
             self.select_all_button,
             self.clear_selection_button,
             self.remove_photos_button,
+            self.sort_name_button,
+            self.sort_date_button,
         ]
         self._layout_photo_actions(430)
         self.ttk.Label(
@@ -843,7 +849,7 @@ class TihuluDesktopApp:
         self.photo_drag_hint_label.configure(wraplength=max(150, event.width - 28))
 
     def _layout_photo_actions(self, width: int) -> None:
-        columns = 4 if width >= 400 else 2
+        columns = 4 if width >= 520 else 2
         if getattr(self, "_photo_action_columns", None) == columns:
             return
         self._photo_action_columns = columns
@@ -1042,8 +1048,8 @@ class TihuluDesktopApp:
                 bg=FIELD,
                 fg=MUTED,
                 bd=0,
-                width=16,
-                height=5,
+                width=24,
+                height=8,
             )
             image_label.pack(fill="both", expand=True, padx=6, pady=(6, 2))
             bound_widgets.append(image_label)
@@ -1056,7 +1062,7 @@ class TihuluDesktopApp:
             bg="#123a43" if selected else PANEL_STRONG,
             fg=CYAN if selected else TEXT,
             font=("Inter", 10, "bold" if selected else "normal"),
-            wraplength=126 if show_thumbnail else 360,
+            wraplength=196 if show_thumbnail else 360,
             justify="center" if show_thumbnail else "left",
             anchor="center" if show_thumbnail else "w",
             padx=6 if show_thumbnail else 10,
@@ -1080,7 +1086,7 @@ class TihuluDesktopApp:
 
     def _fit_photo_grid(self, event: Any) -> None:
         self.photo_canvas.itemconfigure(self.photo_grid_window, width=event.width)
-        columns = 1 if not self.show_photo_thumbnails.get() else max(1, min(5, event.width // 150))
+        columns = 1 if not self.show_photo_thumbnails.get() else max(1, min(4, event.width // 220))
         if columns != self._photo_grid_columns:
             self._photo_grid_columns = columns
             self._layout_photo_tiles()
@@ -1117,7 +1123,7 @@ class TihuluDesktopApp:
         for index in sorted(visible):
             if index >= len(photos) or index in self.thumbnail_images:
                 continue
-            self._submit_thumbnail("photo", photos[index].path, (120, 90), str(index))
+            self._submit_thumbnail("photo", photos[index].path, (180, 135), str(index))
         if not self.cache_thumbnails_in_ram.get():
             for index in prune_invisible_references(self.thumbnail_images, visible):
                 if index < len(self.photo_image_labels) and self.photo_image_labels[index] is not None:
@@ -1291,7 +1297,7 @@ class TihuluDesktopApp:
         if not self.show_photo_thumbnails.get():
             self._clear_thumbnail_cache("photo")
         self._photo_grid_columns = (
-            max(1, min(5, self.photo_canvas.winfo_width() // 150))
+            max(1, min(4, self.photo_canvas.winfo_width() // 220))
             if self.show_photo_thumbnails.get()
             else 1
         )
@@ -1627,6 +1633,15 @@ class TihuluDesktopApp:
         self.workspace.move_photos(self.selected_group, selected, target)
         self._render_workspace()
 
+    def sort_selected_photos(self, mode: str) -> None:
+        if not self.workspace.groups:
+            return
+        self.workspace.sort_photos(self.selected_group, mode)
+        self.current_photo_index = 0
+        self.selected_photo_indices = set()
+        self._render_photos()
+        self._append_log(f"Sorted {self.workspace.groups[self.selected_group].name} by {mode}; this is now the timelapse order.")
+
     def remove_selected_photos(self) -> None:
         selected = sorted(self.selected_photo_indices)
         if not selected:
@@ -1659,6 +1674,11 @@ class TihuluDesktopApp:
     def analyze(self) -> None:
         self._clear_thumbnail_cache()
         self._start_worker("analyze")
+
+    def start_manual_review(self) -> None:
+        """Load the chosen folder into an editable group without visual analysis."""
+        self._clear_thumbnail_cache()
+        self._start_worker("manual")
 
     def export_edited(self) -> None:
         if not self.workspace.nonempty_groups():
@@ -1700,11 +1720,12 @@ class TihuluDesktopApp:
 
         self._clear_log()
         self._set_busy(True)
-        self.state.set({"scan": "SCANNING", "analyze": "ANALYZING", "export": "EXPORTING"}.get(mode, "RUNNING"))
+        self.state.set({"scan": "SCANNING", "analyze": "ANALYZING", "manual": "LOADING", "export": "EXPORTING"}.get(mode, "RUNNING"))
         self.result.set("Working...")
         target = {
             "scan": self._scan_worker,
             "analyze": self._analyze_worker,
+            "manual": self._manual_worker,
             "export": self._export_worker,
             "selected-trail": self._selected_group_worker,
             "selected-timelapse": self._selected_group_worker,
@@ -1739,6 +1760,16 @@ class TihuluDesktopApp:
             self.events.put(("error", error))
         else:
             self.events.put(("groups", groups))
+
+    def _manual_worker(self, payload: dict[str, Any]) -> None:
+        try:
+            paths = list_images(Path(payload["input"]), recursive=bool(payload.get("recursive", True)))
+            if not paths:
+                raise ValueError("No supported images found in the selected folder.")
+        except Exception as error:
+            self.events.put(("error", error))
+        else:
+            self.events.put(("manual", paths))
 
     def _export_worker(self, payload: dict[str, Any]) -> None:
         groups = self.workspace.nonempty_groups()
@@ -1819,6 +1850,11 @@ class TihuluDesktopApp:
                 self.selected_group = 0
                 self._render_workspace()
                 self._finish("READY", f"Analyzed {sum(len(group.photos) for group in payload)} photos into {len(payload)} groups. Open Manual Review to edit them.")
+            elif kind == "manual":
+                self.workspace = GroupWorkspace([EditableGroup("group_001", [assigned_photo(path) for path in payload])])
+                self.selected_group = 0
+                self._render_workspace()
+                self._finish("READY", f"Loaded {len(payload)} photos into group_001 without analysis. Create groups, move frames, then export Trail or Timelapse.")
             elif kind == "error":
                 self._finish("ERROR", str(payload))
                 self._show_error(str(payload))

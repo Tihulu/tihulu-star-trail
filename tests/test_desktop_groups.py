@@ -52,6 +52,24 @@ def test_workspace_reorders_selected_photos_as_a_block_and_undoes() -> None:
     ]
 
 
+def test_workspace_can_apply_name_order_for_timelapse() -> None:
+    group = EditableGroup(
+        "group_001",
+        [assigned_photo(Path(name)) for name in ("IMG_10.jpg", "IMG_2.jpg", "IMG_1.jpg")],
+    )
+    workspace = GroupWorkspace([group])
+
+    workspace.sort_photos(0, "name")
+
+    assert [photo.path.name for photo in workspace.groups[0].photos] == [
+        "IMG_1.jpg", "IMG_2.jpg", "IMG_10.jpg"
+    ]
+    assert workspace.undo()
+    assert [photo.path.name for photo in workspace.groups[0].photos] == [
+        "IMG_10.jpg", "IMG_2.jpg", "IMG_1.jpg"
+    ]
+
+
 def test_editable_groups_can_be_exported_to_a_manifest(tmp_path: Path) -> None:
     photo_path = tmp_path / "photo.jpg"
     photo_path.write_bytes(b"not decoded when trails are disabled")
