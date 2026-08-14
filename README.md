@@ -276,4 +276,4 @@ The expected public repository URL is `https://github.com/Tihulu/tihulu-star-tra
 
 ## License
 
-MIT License. See [LICENSE](LICENSE).
+GNU Affero General Public License v3.0 (AGPLv3). See [LICENSE](LICENSE).
