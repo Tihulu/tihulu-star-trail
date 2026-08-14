@@ -6,6 +6,7 @@ import shutil
 import subprocess
 import sys
 import threading
+from concurrent.futures import ThreadPoolExecutor
 from importlib import resources
 from pathlib import Path
 from typing import Any, Callable
@@ -20,6 +21,15 @@ from .defaults import (
 from .desktop_groups import GroupWorkspace
 from .engine import analyze_groups, execute_action, export_groups, render_selected_group, scan_images
 from .images import read_bgr
+from .hardware import backend_status, detect_hardware_backend, normalize_hardware_mode
+from .thumbnail_cache import (
+    LRUThumbnailCache,
+    ThumbnailGeneration,
+    decode_thumbnail,
+    estimate_image_bytes,
+    prune_invisible_references,
+    thumbnail_key,
+)
 
 TK_HINT = (
     "Native desktop app requires Tk. On macOS with Homebrew, run: "
@@ -91,10 +101,23 @@ class TihuluDesktopApp:
         self.selected_photo_indices: set[int] = set()
         self._photo_selection_anchor: int | None = None
         self.current_photo_index = 0
-        self.thumbnail_images: list[Any] = []
+        self.thumbnail_images: dict[int, Any] = {}
+        self.photo_image_labels: list[Any | None] = []
         self.photo_tiles: list[Any] = []
         self.photo_tile_labels: list[Any] = []
+        self.photo_tile_paths: list[Path] = []
         self.group_thumbnail_images: dict[str, Any] = {}
+        self.thumbnail_cache: LRUThumbnailCache[tuple[str, str, int, int], Any] = LRUThumbnailCache(
+            max_items=128,
+            max_bytes=40 * 1024 * 1024,
+        )
+        self.thumbnail_generation = ThumbnailGeneration()
+        self.thumbnail_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="tihulu-thumb")
+        self.thumbnail_pending: set[tuple[int, tuple[str, str, int, int]]] = set()
+        self.thumbnail_waiters: dict[
+            tuple[int, tuple[str, str, int, int]], list[tuple[str, str, Path]]
+        ] = {}
+        self.thumbnail_futures: set[Any] = set()
         self._photo_grid_columns = 2
         self._preview_resize_after: str | None = None
         self._preview_render_key: tuple[str, int, int] | None = None
@@ -145,11 +168,23 @@ class TihuluDesktopApp:
         self.show_group_thumbnails = tk.BooleanVar(
             value=bool(preferences.get("show_group_thumbnails", False))
         )
+        self.cache_thumbnails_in_ram = tk.BooleanVar(
+            value=bool(preferences.get("cache_thumbnails_in_ram", True))
+        )
+        self.hardware_acceleration = tk.StringVar(
+            value=str(preferences.get("hardware_acceleration", "Auto")).title()
+        )
+        detected_backend = detect_hardware_backend(normalize_hardware_mode(self.hardware_acceleration.get()))
+        self.processing_backend_status = tk.StringVar(value=backend_status(detected_backend))
+        self.thumbnail_cache_status = tk.StringVar()
         self.photo_edit_mode = tk.BooleanVar(value=False)
         if not self.show_photo_thumbnails.get():
             self._photo_grid_columns = 1
 
         self._build_layout()
+        self._update_thumbnail_cache_status()
+        self._append_log(self.processing_backend_status.get())
+        self.root.protocol("WM_DELETE_WINDOW", self.close)
         # Keep receiving the release even when the pointer leaves a thumbnail
         # while it is being dragged over the Groups list.
         self.root.bind_all("<ButtonRelease-1>", self._photo_drop, add="+")
@@ -481,15 +516,16 @@ class TihuluDesktopApp:
 
         groups_panel.rowconfigure(1, weight=1)
         groups_panel.columnconfigure(0, weight=1)
-        self.ttk.Checkbutton(
+        self.group_thumbs_button = self.ttk.Checkbutton(
             groups_panel,
             text="Thumbs",
             variable=self.show_group_thumbnails,
             command=self._toggle_group_thumbnails,
-        ).grid(row=0, column=1, sticky="e", pady=(0, 10))
+        )
+        self.group_thumbs_button.grid(row=0, column=1, sticky="e", pady=(0, 8))
         self.ttk.Style(self.root).configure(
             "Groups.Treeview",
-            rowheight=54 if self.show_group_thumbnails.get() else 28,
+            rowheight=48 if self.show_group_thumbnails.get() else 28,
         )
         self.group_browser = self.tk.Frame(
             groups_panel,
@@ -580,12 +616,39 @@ class TihuluDesktopApp:
             style="Compact.TButton",
         )
         self.photo_edit_button.pack(side="left", padx=(0, 4))
-        self.ttk.Checkbutton(
+        self.photo_thumbs_button = self.ttk.Checkbutton(
             photo_header_actions,
             text="Thumbs",
             variable=self.show_photo_thumbnails,
             command=self._toggle_photo_thumbnails,
-        ).pack(side="left")
+        )
+        self.photo_thumbs_button.pack(side="left", padx=(0, 4))
+        self.ram_cache_button = self.ttk.Checkbutton(
+            photo_header_actions,
+            text="RAM",
+            variable=self.cache_thumbnails_in_ram,
+            command=self._toggle_ram_thumbnail_cache,
+        )
+        self.ram_cache_button.pack(side="left", padx=(0, 4))
+        self.hardware_combo = self.ttk.Combobox(
+            photo_header_actions,
+            textvariable=self.hardware_acceleration,
+            values=("Auto", "CPU", "GPU"),
+            state="readonly",
+            width=5,
+        )
+        self.hardware_combo.pack(side="left")
+        self.hardware_combo.bind("<<ComboboxSelected>>", self._hardware_acceleration_changed)
+        self._add_tooltip(self.photo_edit_button, "Select or deselect multiple photos with ordinary clicks.")
+        self._add_tooltip(self.photo_thumbs_button, "Show 120×90 photo thumbnails; turn off for filename-only mode.")
+        self._add_tooltip(
+            self.ram_cache_button,
+            "Keeps up to 128 downscaled thumbnails (about 40 MB) for faster navigation. Turn off to reduce memory use.",
+        )
+        self._add_tooltip(
+            self.hardware_combo,
+            "Auto uses packaged acceleration when beneficial; CPU is always safe; GPU falls back to CPU if unavailable.",
+        )
         photo_browser = self.ttk.Frame(photos_panel, style="Panel.TFrame")
         photo_browser.grid(row=1, column=0, columnspan=2, sticky="nsew")
         photo_browser.rowconfigure(0, weight=1)
@@ -660,6 +723,12 @@ class TihuluDesktopApp:
             wraplength=250,
         )
         self.photo_drag_hint_label.grid(row=5, column=0, columnspan=2, sticky="ew", pady=(4, 0))
+        self.review_compact_status = self.ttk.Label(
+            photos_panel,
+            textvariable=self.thumbnail_cache_status,
+            font=("Inter", 8),
+        )
+        self.review_compact_status.grid(row=6, column=0, columnspan=2, sticky="ew", pady=(3, 0))
         photos_panel.bind("<Configure>", self._on_photos_panel_resize)
 
         self.root.bind("<Left>", lambda _event: self.navigate_photo(-1))
@@ -698,6 +767,48 @@ class TihuluDesktopApp:
         widget.bind("<Button-4>", callback, add="+")
         widget.bind("<Button-5>", callback, add="+")
 
+    def _add_tooltip(self, widget: Any, message: str) -> None:
+        state: dict[str, Any] = {"window": None, "after": None}
+
+        def show() -> None:
+            if state["window"] is not None:
+                return
+            window = self.tk.Toplevel(self.root)
+            window.wm_overrideredirect(True)
+            window.configure(bg=LINE)
+            x = widget.winfo_rootx()
+            y = widget.winfo_rooty() + widget.winfo_height() + 5
+            window.geometry(f"+{x}+{y}")
+            self.tk.Label(
+                window,
+                text=message,
+                bg=PANEL_STRONG,
+                fg=TEXT,
+                padx=8,
+                pady=6,
+                wraplength=300,
+                justify="left",
+                font=("Inter", 9),
+            ).pack(padx=1, pady=1)
+            state["window"] = window
+
+        def enter(_event: Any) -> None:
+            state["after"] = self.root.after(450, show)
+
+        def leave(_event: Any) -> None:
+            if state["after"] is not None:
+                try:
+                    self.root.after_cancel(state["after"])
+                except self.tk.TclError:
+                    pass
+                state["after"] = None
+            if state["window"] is not None:
+                state["window"].destroy()
+                state["window"] = None
+
+        widget.bind("<Enter>", enter, add="+")
+        widget.bind("<Leave>", leave, add="+")
+
     @staticmethod
     def _wheel_units(event: Any) -> int:
         if getattr(event, "num", None) == 4:
@@ -724,6 +835,7 @@ class TihuluDesktopApp:
         units = self._wheel_units(event)
         if units:
             self.photo_canvas.yview_scroll(units, "units")
+            self.root.after_idle(self._load_visible_photo_thumbnails)
         return "break"
 
     def _on_photos_panel_resize(self, event: Any) -> None:
@@ -783,8 +895,15 @@ class TihuluDesktopApp:
         selected = self.group_list.selection()
         if not selected:
             return
-        self.selected_group = self.group_list.index(selected[0])
+        next_group = self.group_list.index(selected[0])
+        if next_group != self.selected_group:
+            self.thumbnail_generation.advance()
+            self._cancel_thumbnail_jobs()
+            self.thumbnail_images = {}
+        self.selected_group = next_group
+        self._purge_photo_cache_for_current_group()
         self._render_photos()
+        self.root.after_idle(self._load_visible_group_thumbnails)
 
     def _render_workspace(self) -> None:
         children = self.group_list.get_children()
@@ -820,45 +939,54 @@ class TihuluDesktopApp:
     def _load_visible_group_thumbnails(self) -> None:
         if not self.show_group_thumbnails.get() or not self.workspace.groups:
             return
+        visible: set[str] = set()
         for item in self.group_list.get_children():
-            if item in self.group_thumbnail_images or not self.group_list.bbox(item):
+            if not self.group_list.bbox(item):
+                continue
+            visible.add(item)
+            if item in self.group_thumbnail_images:
                 continue
             index = self.group_list.index(item)
             group = self.workspace.groups[index]
-            image = None
             if group.photos:
-                try:
-                    image = self._photo_image(group.photos[0].path, (54, 42))
-                except Exception:
-                    image = None
-            self.group_thumbnail_images[item] = image
-            if image is not None:
-                self.group_list.item(item, image=image)
-            self.root.after_idle(self._load_visible_group_thumbnails)
-            break
+                self._submit_thumbnail("group", group.photos[0].path, (48, 36), item)
+        if not self.cache_thumbnails_in_ram.get():
+            for item in prune_invisible_references(self.group_thumbnail_images, visible):
+                if self.group_list.exists(item):
+                    self.group_list.item(item, image="")
 
     def _toggle_group_thumbnails(self) -> None:
         self.ttk.Style(self.root).configure(
             "Groups.Treeview",
-            rowheight=54 if self.show_group_thumbnails.get() else 28,
+            rowheight=48 if self.show_group_thumbnails.get() else 28,
         )
         self._save_preferences()
-        self.group_thumbnail_images = {}
+        if not self.show_group_thumbnails.get():
+            self._clear_thumbnail_cache("group")
+        else:
+            self.group_thumbnail_images = {}
         for item in self.group_list.get_children():
             self.group_list.item(item, image="")
         if self.show_group_thumbnails.get():
             self.root.after_idle(self._load_visible_group_thumbnails)
 
     def _render_photos(self, *, preserve_selection: bool = False) -> None:
+        reusable_images = {
+            path: self.thumbnail_images[index]
+            for index, path in enumerate(self.photo_tile_paths)
+            if index in self.thumbnail_images
+        }
         previous_selection = set(self.selected_photo_indices) if preserve_selection else set()
         previous_current = self.current_photo_index if preserve_selection else 0
         if not preserve_selection:
             self._preview_render_key = None
         for child in self.photo_grid.winfo_children():
             child.destroy()
-        self.thumbnail_images = []
+        self.thumbnail_images = {}
+        self.photo_image_labels = []
         self.photo_tiles = []
         self.photo_tile_labels = []
+        self.photo_tile_paths = []
         self.selected_photo_indices = previous_selection
         if not preserve_selection:
             self._photo_selection_anchor = None
@@ -879,7 +1007,13 @@ class TihuluDesktopApp:
             for index, photo in enumerate(group.photos):
                 tile = self._photo_tile(photo.path, index)
                 self.photo_tiles.append(tile)
+                self.photo_tile_paths.append(photo.path)
+                if photo.path in reusable_images and self.photo_image_labels[index] is not None:
+                    image = reusable_images[photo.path]
+                    self.thumbnail_images[index] = image
+                    self.photo_image_labels[index].configure(image=image, text="")
             self._layout_photo_tiles()
+            self.root.after_idle(self._load_visible_photo_thumbnails)
             self._refresh_photo_tile_selection()
             self._show_photo(self.current_photo_index, preserve_selection=True)
         else:
@@ -891,14 +1025,6 @@ class TihuluDesktopApp:
 
     def _photo_tile(self, path: Path, index: int) -> Any:
         show_thumbnail = self.show_photo_thumbnails.get()
-        image = None
-        if show_thumbnail:
-            try:
-                image = self._photo_image(path, (180, 135))
-            except Exception:
-                image = None
-            else:
-                self.thumbnail_images.append(image)
         selected = index in self.selected_photo_indices
         tile = self.tk.Frame(
             self.photo_grid,
@@ -912,21 +1038,25 @@ class TihuluDesktopApp:
         if show_thumbnail:
             image_label = self.tk.Label(
                 tile,
-                image=image,
-                text="Preview unavailable" if image is None else "",
+                text="Loading…",
                 bg=FIELD,
                 fg=MUTED,
                 bd=0,
+                width=16,
+                height=5,
             )
             image_label.pack(fill="both", expand=True, padx=6, pady=(6, 2))
             bound_widgets.append(image_label)
+            self.photo_image_labels.append(image_label)
+        else:
+            self.photo_image_labels.append(None)
         name_label = self.tk.Label(
             tile,
             text=f"✓  {path.name}" if selected else path.name,
             bg="#123a43" if selected else PANEL_STRONG,
             fg=CYAN if selected else TEXT,
             font=("Inter", 10, "bold" if selected else "normal"),
-            wraplength=176 if show_thumbnail else 360,
+            wraplength=126 if show_thumbnail else 360,
             justify="center" if show_thumbnail else "left",
             anchor="center" if show_thumbnail else "w",
             padx=6 if show_thumbnail else 10,
@@ -950,23 +1080,218 @@ class TihuluDesktopApp:
 
     def _fit_photo_grid(self, event: Any) -> None:
         self.photo_canvas.itemconfigure(self.photo_grid_window, width=event.width)
-        columns = 1 if not self.show_photo_thumbnails.get() else max(1, min(4, event.width // 205))
+        columns = 1 if not self.show_photo_thumbnails.get() else max(1, min(5, event.width // 150))
         if columns != self._photo_grid_columns:
             self._photo_grid_columns = columns
             self._layout_photo_tiles()
+        self.root.after_idle(self._load_visible_photo_thumbnails)
 
     def _layout_photo_tiles(self) -> None:
         columns = max(1, self._photo_grid_columns)
-        for column in range(4):
+        for column in range(5):
             self.photo_grid.columnconfigure(column, weight=1 if column < columns else 0)
         for index, tile in enumerate(self.photo_tiles):
             row, column = divmod(index, columns)
             tile.grid(row=row, column=column, sticky="nsew", padx=5, pady=5)
 
+    def _visible_photo_indices(self) -> set[int]:
+        if not self.photo_tiles:
+            return set()
+        if self.photo_grid.winfo_height() <= 1 or any(tile.winfo_height() <= 1 for tile in self.photo_tiles[:1]):
+            return set()
+        top = self.photo_canvas.canvasy(0)
+        bottom = top + self.photo_canvas.winfo_height()
+        return {
+            index
+            for index, tile in enumerate(self.photo_tiles)
+            if tile.winfo_y() + tile.winfo_height() >= top and tile.winfo_y() <= bottom
+        }
+
+    def _load_visible_photo_thumbnails(self) -> None:
+        if not self.show_photo_thumbnails.get() or not self.workspace.groups:
+            return
+        visible = self._visible_photo_indices()
+        if not visible:
+            return
+        photos = self.workspace.groups[self.selected_group].photos
+        for index in sorted(visible):
+            if index >= len(photos) or index in self.thumbnail_images:
+                continue
+            self._submit_thumbnail("photo", photos[index].path, (120, 90), str(index))
+        if not self.cache_thumbnails_in_ram.get():
+            for index in prune_invisible_references(self.thumbnail_images, visible):
+                if index < len(self.photo_image_labels) and self.photo_image_labels[index] is not None:
+                    self.photo_image_labels[index].configure(image="", text="Loading…")
+
+    def _submit_thumbnail(
+        self,
+        kind: str,
+        path: Path,
+        bounds: tuple[int, int],
+        identity: str,
+    ) -> None:
+        key = thumbnail_key(kind, path, bounds)
+        generation = self.thumbnail_generation.current
+        cached = self.thumbnail_cache.get(key) if self.cache_thumbnails_in_ram.get() else None
+        if cached is not None:
+            self._apply_thumbnail(kind, identity, path, cached, generation)
+            return
+        token = (generation, key)
+        self.thumbnail_waiters.setdefault(token, []).append((kind, identity, Path(path)))
+        if token in self.thumbnail_pending:
+            return
+        self.thumbnail_pending.add(token)
+        future = self.thumbnail_executor.submit(decode_thumbnail, Path(path), bounds)
+        self.thumbnail_futures.add(future)
+
+        def completed(job: Any) -> None:
+            self.thumbnail_futures.discard(job)
+            try:
+                image = job.result()
+                error = None
+            except Exception as failure:
+                image = None
+                error = str(failure)
+            self.events.put(
+                (
+                    "thumbnail",
+                    {
+                        "token": token,
+                        "generation": generation,
+                        "path": Path(path),
+                        "key": key,
+                        "image": image,
+                        "error": error,
+                    },
+                )
+            )
+
+        future.add_done_callback(completed)
+
+    def _apply_thumbnail(
+        self,
+        kind: str,
+        identity: str,
+        path: Path,
+        image: Any,
+        generation: int,
+    ) -> None:
+        if not self.thumbnail_generation.accepts(generation):
+            return
+        from PIL import ImageTk
+
+        if kind == "photo":
+            index = int(identity)
+            if not self.workspace.groups or index >= len(self.workspace.groups[self.selected_group].photos):
+                return
+            if self.workspace.groups[self.selected_group].photos[index].path != Path(path):
+                return
+            if index >= len(self.photo_image_labels) or self.photo_image_labels[index] is None:
+                return
+            tk_image = ImageTk.PhotoImage(image)
+            self.thumbnail_images[index] = tk_image
+            self.photo_image_labels[index].configure(image=tk_image, text="")
+            return
+
+        item = identity
+        if not self.group_list.exists(item):
+            return
+        index = self.group_list.index(item)
+        group = self.workspace.groups[index]
+        if not group.photos or group.photos[0].path != Path(path):
+            return
+        tk_image = ImageTk.PhotoImage(image)
+        self.group_thumbnail_images[item] = tk_image
+        self.group_list.item(item, image=tk_image)
+
+    def _handle_thumbnail_result(self, payload: dict[str, Any]) -> None:
+        self.thumbnail_pending.discard(payload["token"])
+        waiters = self.thumbnail_waiters.pop(payload["token"], [])
+        if payload["error"] is not None or not self.thumbnail_generation.accepts(payload["generation"]):
+            return
+        image = payload["image"]
+        if self.cache_thumbnails_in_ram.get():
+            self.thumbnail_cache.put(payload["key"], image, estimate_image_bytes(image))
+        for kind, identity, path in waiters:
+            self._apply_thumbnail(kind, identity, path, image, payload["generation"])
+        self._update_thumbnail_cache_status()
+
+    def _purge_photo_cache_for_current_group(self) -> None:
+        if not self.workspace.groups:
+            self.thumbnail_cache.remove_where(lambda key: key[0] == "photo")
+            return
+        current_paths = {str(photo.path) for photo in self.workspace.groups[self.selected_group].photos}
+        self.thumbnail_cache.remove_where(
+            lambda key: key[0] == "photo" and key[1] not in current_paths
+        )
+        self._update_thumbnail_cache_status()
+
+    def _clear_thumbnail_cache(self, kind: str | None = None) -> None:
+        self.thumbnail_generation.advance()
+        self._cancel_thumbnail_jobs()
+        if kind is None:
+            self.thumbnail_cache.clear()
+        else:
+            self.thumbnail_cache.remove_where(lambda key: key[0] == kind)
+        if kind in {None, "photo"}:
+            self.thumbnail_images = {}
+            for label in self.photo_image_labels:
+                if label is not None:
+                    label.configure(image="", text="Loading…")
+        if kind in {None, "group"}:
+            self.group_thumbnail_images = {}
+            if hasattr(self, "group_list"):
+                for item in self.group_list.get_children():
+                    self.group_list.item(item, image="")
+        self._update_thumbnail_cache_status()
+
+    def _cancel_thumbnail_jobs(self) -> None:
+        for future in list(self.thumbnail_futures):
+            future.cancel()
+        self.thumbnail_futures.clear()
+        self.thumbnail_pending.clear()
+        self.thumbnail_waiters.clear()
+
+    def _toggle_ram_thumbnail_cache(self) -> None:
+        if not self.cache_thumbnails_in_ram.get():
+            self.thumbnail_cache.clear()
+        self._save_preferences()
+        self._update_thumbnail_cache_status()
+        self.root.after_idle(self._load_visible_photo_thumbnails)
+        self.root.after_idle(self._load_visible_group_thumbnails)
+
+    def _hardware_acceleration_changed(self, _event: Any = None) -> None:
+        mode = normalize_hardware_mode(self.hardware_acceleration.get())
+        backend = detect_hardware_backend(mode)
+        self.processing_backend_status.set(backend_status(backend))
+        self._append_log(self.processing_backend_status.get())
+        self._save_preferences()
+        self._update_thumbnail_cache_status()
+
+    def _update_thumbnail_cache_status(self) -> None:
+        if not hasattr(self, "thumbnail_cache_status"):
+            return
+        stats = self.thumbnail_cache.stats
+        cache = (
+            f"RAM cache {stats.items}/128 · {stats.bytes / (1024 * 1024):.1f}/40 MB"
+            if self.cache_thumbnails_in_ram.get()
+            else "RAM cache off · visible thumbnails only"
+        )
+        backend = self.processing_backend_status.get().replace("Hardware acceleration: ", "")
+        frame = "frame —"
+        if self.workspace.groups and self.workspace.groups[self.selected_group].photos:
+            total = len(self.workspace.groups[self.selected_group].photos)
+            frame = f"frame {min(self.current_photo_index + 1, total)}/{total}"
+        self.thumbnail_cache_status.set(
+            f"{frame} · {len(self.selected_photo_indices)} selected · {cache} · {backend}"
+        )
+
     def _toggle_photo_thumbnails(self) -> None:
         self._save_preferences()
+        if not self.show_photo_thumbnails.get():
+            self._clear_thumbnail_cache("photo")
         self._photo_grid_columns = (
-            max(1, min(4, self.photo_canvas.winfo_width() // 205))
+            max(1, min(5, self.photo_canvas.winfo_width() // 150))
             if self.show_photo_thumbnails.get()
             else 1
         )
@@ -1001,6 +1326,8 @@ class TihuluDesktopApp:
                     {
                         "show_photo_thumbnails": self.show_photo_thumbnails.get(),
                         "show_group_thumbnails": self.show_group_thumbnails.get(),
+                        "cache_thumbnails_in_ram": self.cache_thumbnails_in_ram.get(),
+                        "hardware_acceleration": self.hardware_acceleration.get(),
                     },
                     indent=2,
                 )
@@ -1050,6 +1377,7 @@ class TihuluDesktopApp:
             if self.photo_edit_mode.get()
             else "Click a photo to preview it. Use Edit for multi-select; drag photos to reorder the timelapse or move them to another group."
         )
+        self._update_thumbnail_cache_status()
 
     def _photo_drag_start(self, event: Any, index: int) -> None:
         if self.photo_edit_mode.get():
@@ -1112,8 +1440,15 @@ class TihuluDesktopApp:
                 self._photo_reorder_target = photo_target
                 target_index, place_after = photo_target
                 self.photo_tiles[target_index].configure(highlightbackground=YELLOW)
+                target_name = self.workspace.groups[self.selected_group].photos[target_index].path.name
+                if target_index < len(self.photo_tile_labels):
+                    self.photo_tile_labels[target_index].configure(
+                        text=(f"DROP AFTER ↓  {target_name}" if place_after else f"DROP BEFORE ↑  {target_name}"),
+                        fg=YELLOW,
+                        font=("Inter", 10, "bold"),
+                    )
                 self.photo_drag_hint.set(
-                    f"Release to place {len(self._drag_photo_indices)} photo(s) {'after' if place_after else 'before'} {self.workspace.groups[self.selected_group].photos[target_index].path.name}."
+                    f"Release to place {len(self._drag_photo_indices)} photo(s) {'after' if place_after else 'before'} {target_name}."
                 )
             else:
                 self.group_browser.configure(highlightbackground=LINE)
@@ -1309,6 +1644,7 @@ class TihuluDesktopApp:
         selected = filedialog.askdirectory(title="Select photo folder", initialdir=self.input_path.get() or str(Path.home()))
         if selected:
             self.input_path.set(selected)
+            self._clear_thumbnail_cache()
 
     def _browse_output(self) -> None:
         from tkinter import filedialog
@@ -1321,6 +1657,7 @@ class TihuluDesktopApp:
         self._start_worker("scan")
 
     def analyze(self) -> None:
+        self._clear_thumbnail_cache()
         self._start_worker("analyze")
 
     def export_edited(self) -> None:
@@ -1456,6 +1793,7 @@ class TihuluDesktopApp:
             "codec": "VP90" if self.video_format.get() == "webm" else "mp4v",
             "video_extension": self.video_format.get(),
             "render_trails": True,
+            "hardware_acceleration": normalize_hardware_mode(self.hardware_acceleration.get()),
         }
 
     def _drain_events(self) -> None:
@@ -1466,6 +1804,11 @@ class TihuluDesktopApp:
                 break
             if kind == "log":
                 self._append_log(str(payload))
+                if str(payload).startswith("Hardware acceleration"):
+                    self.processing_backend_status.set(str(payload))
+                    self._update_thumbnail_cache_status()
+            elif kind == "thumbnail":
+                self._handle_thumbnail_result(payload)
             elif kind == "scan":
                 self._finish("READY", self._format_scan(payload))
             elif kind == "result":
@@ -1605,7 +1948,7 @@ FPS / Video Quality Mbps
 12–18 FPS feels calm, 24 is cinematic, and 30–60 is smoother but needs more frames. 4–8 Mbps works for previews, 10–20 is cleaner, and 25+ is best for 4K-style exports.
 
 Manual Review
-Analyze Groups first. Drag the panel dividers to resize Groups, Photo Preview, and Group Photos; the preview and controls adapt to the available width. The mouse wheel scrolls both lists. Group Thumbs loads previews only for visible groups; Photo Thumbs can be turned off for a faster filename-only list. Click Edit to select or deselect multiple photos with normal clicks, then Done to drag them before or after another photo to set the timelapse order, or onto another group to move them. Multi-selected photos move as one block. Ctrl/Command and Shift selection also remain available. Trail stacking is order-independent, but moving or removing frames changes its result. You can rename, add, drag-reorder, move or remove photos, navigate with arrow keys, and undo up to 50 edits. Export Edited writes only non-empty groups.
+Analyze Groups first. Drag the panel dividers to resize Groups, Photo Preview, and Group Photos; compact controls and thumbnail columns adapt to the available width. Photo Thumbs uses 120×90 cards and Group Thumbs uses 48×36 previews; turn either off for less work, with Photo Thumbs becoming a filename-only list. Background workers decode visible thumbnails without blocking the UI. RAM cache is on by default and keeps at most 128 downscaled thumbnails / about 40 MB for faster navigation; turn it off to retain only visible UI thumbnails and reduce memory use. Auto hardware acceleration safely uses a packaged backend when available, while CPU and GPU can be selected explicitly; GPU errors log once and fall back to CPU. Click Edit to select or deselect multiple photos with normal clicks, then Done to drag them before or after another photo to set the timelapse order, or onto another group to move them. Multi-selected photos move as one block. Ctrl/Command and Shift selection also remain available. Trail stacking is order-independent, but moving or removing frames changes its result. You can rename, add, drag-reorder, move or remove photos, navigate with arrow keys, and undo up to 50 edits. Export Edited writes only non-empty groups.
 
 Original photos are never modified.
 """
@@ -1705,6 +2048,8 @@ Original photos are never modified.
 
     def close(self) -> None:
         self._stop_video()
+        self._clear_thumbnail_cache()
+        self.thumbnail_executor.shutdown(wait=False, cancel_futures=True)
         try:
             self.root.destroy()
         except self.tk.TclError:

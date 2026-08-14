@@ -1,0 +1,4 @@
+3d29350b386dae3cbea90f82dc550710dd725593b0a2d1bc7f519788e276b799  Tihulu-Star-Trail-0.1.7-linux-x86_64-no-fuse.sh
+13eb14d66542fa6874b4a20cb0d0d9d49629543c853d7e5ac2134571ce9646e5  Tihulu-Star-Trail-0.1.7-linux-x86_64.AppImage
+a4d533fd700b4792f45656815f784373b39dc56a8432c82972f0ab4b50d002a2  Tihulu-Star-Trail-0.1.7-macOS-arm64.dmg
+4dad91043916eef9767de2cce6413afb81882a22f31bfc2fbaddf034383415ab  Tihulu-Star-Trail-0.1.7-macOS-x86_64.dmg

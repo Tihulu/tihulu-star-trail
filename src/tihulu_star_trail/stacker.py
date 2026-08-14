@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Callable, Iterable
 if TYPE_CHECKING:
     from .grouping import AngleGroup
 from .images import list_images, read_bgr, sort_images_by_time, write_bgr
+from .hardware import backend_status, detect_hardware_backend, maximum_images, resize_image
 
 Progress = Callable[[str], None]
 
@@ -63,18 +64,21 @@ def stack_lighten(
     resize_to_first: bool = True,
     max_side: int | None = None,
     progress: Progress | None = None,
+    hardware_mode: str = "auto",
 ) -> Path:
     import cv2
-    import numpy as np
 
     ordered_paths = sort_images_by_time(list(paths))
     if not ordered_paths:
         raise ValueError("No images were provided for stacking.")
 
+    backend = detect_hardware_backend(hardware_mode)
+    if progress is not None:
+        progress(backend_status(backend))
     first = read_bgr(ordered_paths[0])
     target_size = _image_target_size(first.shape[1], first.shape[0], max_side=max_side)
     if (first.shape[1], first.shape[0]) != target_size:
-        first = cv2.resize(first, target_size, interpolation=cv2.INTER_AREA)
+        first = resize_image(first, target_size, backend, progress=progress)
     base_height, base_width = first.shape[:2]
     stack = first.copy()
 
@@ -88,12 +92,8 @@ def stack_lighten(
                     f"Image size mismatch for {path}: "
                     f"{image.shape[1]}x{image.shape[0]} != {base_width}x{base_height}"
                 )
-            image = cv2.resize(
-                image,
-                (base_width, base_height),
-                interpolation=cv2.INTER_AREA,
-            )
-        stack = np.maximum(stack, image)
+            image = resize_image(image, (base_width, base_height), backend, progress=progress)
+        stack = maximum_images(stack, image, backend, progress=progress)
 
     write_bgr(output_path, stack, jpeg_quality=jpeg_quality)
     return output_path
@@ -108,6 +108,7 @@ def render_timelapse(
     bitrate_mbps: float | None = None,
     progress: Progress | None = None,
     preserve_order: bool = False,
+    hardware_mode: str = "auto",
 ) -> Path:
     import cv2
 
@@ -124,6 +125,9 @@ def render_timelapse(
         output_path = output_path / "timelapse.mp4"
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
+    backend = detect_hardware_backend(hardware_mode)
+    if progress is not None:
+        progress(backend_status(backend))
     first = read_bgr(ordered_paths[0])
     frame_size = _target_size(first.shape[1], first.shape[0], max_side=max_side)
     ffmpeg = ffmpeg_executable()
@@ -147,7 +151,7 @@ def render_timelapse(
                 progress(f"[{index}/{len(ordered_paths)}] timelapse {path.name}")
             frame = read_bgr(path)
             if frame.shape[1] != frame_size[0] or frame.shape[0] != frame_size[1]:
-                frame = cv2.resize(frame, frame_size, interpolation=cv2.INTER_AREA)
+                frame = resize_image(frame, frame_size, backend, progress=progress)
             writer.write(frame)
     finally:
         writer.release()
@@ -177,6 +181,7 @@ def render_group_trails(
     image_format: str = "jpeg",
     max_side: int | None = None,
     progress: Progress | None = None,
+    hardware_mode: str = "auto",
 ) -> list[Path]:
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -198,6 +203,7 @@ def render_group_trails(
                 jpeg_quality=jpeg_quality,
                 max_side=max_side,
                 progress=progress,
+                hardware_mode=hardware_mode,
             )
         )
     return rendered
@@ -214,6 +220,7 @@ def render_group_timelapses(
     bitrate_mbps: float | None = None,
     progress: Progress | None = None,
     preserve_order: bool = False,
+    hardware_mode: str = "auto",
 ) -> list[Path]:
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -238,6 +245,7 @@ def render_group_timelapses(
                 bitrate_mbps=bitrate_mbps,
                 progress=progress,
                 preserve_order=preserve_order,
+                hardware_mode=hardware_mode,
             )
         )
     return rendered
@@ -251,6 +259,7 @@ def render_trails_from_group_dirs(
     image_format: str = "jpeg",
     max_side: int | None = None,
     progress: Progress | None = None,
+    hardware_mode: str = "auto",
 ) -> list[Path]:
     group_dirs = discover_group_dirs(input_dir)
     if not group_dirs:
@@ -276,6 +285,7 @@ def render_trails_from_group_dirs(
                 jpeg_quality=jpeg_quality,
                 max_side=max_side,
                 progress=progress,
+                hardware_mode=hardware_mode,
             )
         )
     return rendered
@@ -291,6 +301,7 @@ def render_timelapses_from_group_dirs(
     video_format: str = "mp4",
     bitrate_mbps: float | None = None,
     progress: Progress | None = None,
+    hardware_mode: str = "auto",
 ) -> list[Path]:
     group_dirs = discover_group_dirs(input_dir)
     if not group_dirs:
@@ -318,6 +329,7 @@ def render_timelapses_from_group_dirs(
                 max_side=max_side,
                 bitrate_mbps=bitrate_mbps,
                 progress=progress,
+                hardware_mode=hardware_mode,
             )
         )
     return rendered

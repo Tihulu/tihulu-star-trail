@@ -2,15 +2,7 @@
 
 Tihulu Star Trail provides native desktop installation for macOS and Debian-based Linux distributions such as Debian, Ubuntu, and Pop!_OS. The hosted browser app remains available without installation at <https://tihulu.github.io/tihulu-star-trail/>.
 
-Every native installation includes the same Manual Review workspace. Drag the dividers between **Groups**, **Photo Preview**, and **Group Photos** to resize those areas; previews, toolbars, buttons, labels, and thumbnail columns reflow with the available width. The mouse wheel scrolls both browsers and their narrow scrollbars no longer dominate the panels.
-
-Photo thumbnails are approximately 120×90 and group thumbnails are approximately 48×36. Both are decoded in background workers, visible cards are prioritized, and only downscaled images enter the cache. **RAM** cache is enabled by default and keeps at most 128 thumbnails / approximately 40 MB for faster navigation. Disable it to reduce memory use; only currently visible UI thumbnail references are then retained. **Photo Thumbs** and **Group Thumbs** can be disabled independently, with Photo Thumbs producing a compact filename-only list. These settings persist between launches.
-
-Use **Edit** to select or deselect multiple photos with ordinary clicks, then **Done** to drag the selection before or after another photo to set the timelapse sequence, or onto another group to move it. Multi-selected photos move as one block, Undo restores the previous order, and the native renderer uses that order unchanged. Trail stacking itself is order-independent, while moving or removing frames still changes the trail result.
-
-**Hardware Acceleration** offers Auto (default), CPU, and GPU. Auto uses a packaged CUDA/OpenCL backend only when the runtime reports it as available; otherwise it uses CPU. GPU mode also falls back safely to CPU if initialization or processing fails. No CUDA toolkit, Homebrew package, Python package, or separate GPU dependency is required. The compact status line and Monitor log show the active backend.
-
-Older releases remain available. The preserved pre-performance v0.1.7 snapshot and restore instructions are in [`archive/v0.1.7/`](../archive/v0.1.7/README.md), and its original packages remain unchanged on the [v0.1.7 GitHub Release](https://github.com/Tihulu/tihulu-star-trail/releases/tag/v0.1.7).
+Every native installation includes the same Manual Review workspace. Drag the dividers between **Groups**, **Photo Preview**, and **Group Photos** to resize those areas; previews and compact controls reflow with the available width. The mouse wheel scrolls both group and photo browsers. **Thumbs** can be disabled independently for groups and photos to avoid decoding unnecessary previews; group thumbnails load only for visible rows, while the photo browser becomes a lightweight filename-only list. Use **Edit** to select or deselect multiple photos with ordinary clicks, then **Done** to drag the selection before or after another photo to set the timelapse sequence, or onto another group to move it. Multi-selected photos move as one block, and Undo restores the previous order. Thumbnail preferences are remembered for the next launch.
 
 ## Supported Systems
 
@@ -24,7 +16,7 @@ Older releases remain available. The preserved pre-performance v0.1.7 snapshot a
 
 ### Requirements
 
-- An Apple Silicon Mac (`M1`, `M2`, `M3`, `M4`, or newer) running macOS 11 or newer.
+- macOS 11 or newer.
 - An internet connection during the first installation.
 
 The release DMG contains a standalone application and does not require Python, Homebrew, or a separate FFmpeg installation. It includes its own architecture-matched FFmpeg binary for MP4 and timelapse exports. The one-line command installs [Homebrew](https://brew.sh/) when it is missing, then uses it to install Python 3.12, Tk, FFmpeg, Git when needed, and all Python dependencies.
@@ -32,14 +24,12 @@ The release DMG contains a standalone application and does not require Python, H
 ### DMG Installation
 
 1. Open the [latest GitHub Release](https://github.com/Tihulu/tihulu-star-trail/releases/latest).
-2. Download the `arm64.dmg` for an Apple Silicon Mac.
+2. Download `arm64.dmg` for an Apple Silicon Mac, or `x86_64.dmg` for an Intel Mac.
 3. Open the DMG.
 4. Drag **Tihulu Star Trail** into the Applications shortcut.
 5. Open the app from Applications.
 
 Release builds are ad-hoc signed but not Apple-notarized. On the first launch, macOS may require you to Control-click **Tihulu Star Trail**, choose **Open**, and confirm the prompt. MP4 and timelapse export works from the DMG without installing FFmpeg separately.
-
-Intel Macs use the preserved [v0.1.7 x86_64 DMG](https://github.com/Tihulu/tihulu-star-trail/releases/download/v0.1.7/Tihulu-Star-Trail-0.1.7-macOS-x86_64.dmg). Follow the [v0.1.7 archived setup guide](../archive/v0.1.7/README.md); v0.1.7 is the last packaged Intel release, while v0.2.0 and newer native macOS packages target Apple Silicon.
 
 The DMG application is standalone. The Homebrew-based method below remains useful when you also want the `tihulu` command-line launcher.
 
