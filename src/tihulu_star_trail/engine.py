@@ -91,6 +91,49 @@ def export_groups(
     return result
 
 
+def render_selected_group(
+    group: Any,
+    payload: dict[str, Any],
+    *,
+    trail: bool,
+    timelapse: bool,
+    progress: Progress | None = None,
+) -> dict[str, Any]:
+    """Render media for one manually selected group without exporting every group."""
+    if not group.photos:
+        raise ValueError("The selected group has no photos.")
+    if not trail and not timelapse:
+        raise ValueError("Choose a trail or timelapse export.")
+
+    output_path = _payload_path(payload, "output")
+    result: dict[str, Any] = {"groups": 1}
+    if trail:
+        trails = render_group_trails(
+            [group],
+            output_path / "trails",
+            min_frames=int(payload.get("min_frames", 2)),
+            jpeg_quality=int(payload.get("jpeg_quality", 95)),
+            image_format=str(payload.get("image_format", "jpeg")),
+            max_side=_optional_max_side(int(payload.get("output_max_side", 0))),
+            progress=progress,
+        )
+        result["trails"] = [str(path) for path in trails]
+    if timelapse:
+        videos = render_group_timelapses(
+            [group],
+            output_path / "timelapses",
+            min_frames=int(payload.get("min_frames", 2)),
+            fps=float(payload.get("fps", 24.0)),
+            codec=str(payload.get("codec", "mp4v")),
+            max_side=_optional_max_side(int(payload.get("video_max_side", 1920))),
+            video_format=str(payload.get("video_extension", "mp4")),
+            bitrate_mbps=_optional_float(payload.get("video_quality_mbps")),
+            progress=progress,
+        )
+        result["timelapses"] = [str(path) for path in videos]
+    return result
+
+
 def scan_images(payload: dict[str, Any]) -> dict[str, Any]:
     input_path = _payload_path(payload, "input")
     recursive = bool(payload.get("recursive", True))
