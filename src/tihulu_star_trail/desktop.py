@@ -1049,17 +1049,20 @@ class TihuluDesktopApp:
         )
         bound_widgets = [tile]
         if show_thumbnail:
+            # Keep a real visual slot even when Tk recalculates a label from a
+            # very wide source image; otherwise it collapses into a thin strip.
+            thumbnail_holder = self.tk.Frame(tile, bg=FIELD, height=120)
+            thumbnail_holder.pack(fill="x", padx=6, pady=(6, 2))
+            thumbnail_holder.pack_propagate(False)
             image_label = self.tk.Label(
-                tile,
+                thumbnail_holder,
                 text="Loading…",
                 bg=FIELD,
                 fg=MUTED,
                 bd=0,
-                width=24,
-                height=8,
             )
-            image_label.pack(fill="both", expand=True, padx=6, pady=(6, 2))
-            bound_widgets.append(image_label)
+            image_label.pack(fill="both", expand=True)
+            bound_widgets.extend([thumbnail_holder, image_label])
             self.photo_image_labels.append(image_label)
         else:
             self.photo_image_labels.append(None)
@@ -1130,7 +1133,7 @@ class TihuluDesktopApp:
         for index in sorted(visible):
             if index >= len(photos) or index in self.thumbnail_images:
                 continue
-            self._submit_thumbnail("photo", photos[index].path, (180, 135), str(index))
+            self._submit_thumbnail("photo", photos[index].path, (180, 120), str(index))
         if not self.cache_thumbnails_in_ram.get():
             for index in prune_invisible_references(self.thumbnail_images, visible):
                 if index < len(self.photo_image_labels) and self.photo_image_labels[index] is not None:
@@ -2014,7 +2017,7 @@ FPS / Video Quality Mbps
 12–18 FPS feels calm, 24 is cinematic, and 30–60 is smoother but needs more frames. 4–8 Mbps works for previews, 10–20 is cleaner, and 25+ is best for 4K-style exports.
 
 Manual Review
-Analyze Groups first. Drag the panel dividers to resize Groups, Photo Preview, and Group Photos; compact controls and thumbnail columns adapt to the available width. Photo Thumbs uses 120×90 cards and Group Thumbs uses 48×36 previews; turn either off for less work, with Photo Thumbs becoming a filename-only list. Background workers decode visible thumbnails without blocking the UI. RAM cache is on by default and keeps at most 128 downscaled thumbnails / about 40 MB for faster navigation; turn it off to retain only visible UI thumbnails and reduce memory use. Auto hardware acceleration safely uses a packaged backend when available, while CPU and GPU can be selected explicitly; GPU errors log once and fall back to CPU. Click Edit to select or deselect multiple photos with normal clicks, then Done to drag them before or after another photo to set the timelapse order, or onto another group to move them. Multi-selected photos move as one block. Ctrl/Command and Shift selection also remain available. Trail stacking is order-independent, but moving or removing frames changes its result. You can rename, add, drag-reorder, move or remove photos, navigate with arrow keys, and undo up to 50 edits. Export Edited writes only non-empty groups.
+Analyze Groups first. Drag the panel dividers to resize Groups, Photo Preview, and Group Photos; compact controls and thumbnail columns adapt to the available width. Photo Thumbs use fixed 180×120 visual cards and Group Thumbs use 48×36 previews; turn either off for less work, with Photo Thumbs becoming a filename-only list. Background workers decode visible thumbnails without blocking the UI. RAM cache is on by default and keeps at most 128 downscaled thumbnails / about 40 MB for faster navigation; turn it off to retain only visible UI thumbnails and reduce memory use. Auto hardware acceleration safely uses a packaged backend when available, while CPU and GPU can be selected explicitly; GPU errors log once and fall back to CPU. Click Edit to select or deselect multiple photos with normal clicks, then Done to drag them before or after another photo to set the timelapse order, or onto another group to move them. Multi-selected photos move as one block. Ctrl/Command and Shift selection also remain available. Trail stacking is order-independent, but moving or removing frames changes its result. You can rename, add, drag-reorder, move or remove photos, navigate with arrow keys, and undo up to 50 edits. Export Edited writes only non-empty groups.
 
 Original photos are never modified.
 """
