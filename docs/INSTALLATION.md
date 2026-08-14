@@ -109,7 +109,7 @@ chmod +x Tihulu-Star-Trail-*-linux-x86_64.AppImage
 ./Tihulu-Star-Trail-*-linux-x86_64.AppImage
 ```
 
-The AppImage contains the application, Python dependencies, RAW support, and an x86_64 FFmpeg binary. MP4 and timelapse exports work without installing Python, Homebrew, or FFmpeg. It does not modify the system or create an application-menu entry. Use the installation script below for managed desktop integration.
+The AppImage contains the application, Python dependencies, RAW support, and an x86_64 FFmpeg binary. MP4 and timelapse exports work without installing Python, Homebrew, or FFmpeg. If `libfuse2` is unavailable, download the release's matching `-no-fuse.sh` launcher, keep it in the same directory as the AppImage, and run it instead; it extracts and runs the AppImage without FUSE. The AppImage does not modify the system or create an application-menu entry. Use the installation script below for managed desktop integration.
 
 ### One-Line Installation
 
