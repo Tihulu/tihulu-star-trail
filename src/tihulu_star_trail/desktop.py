@@ -85,7 +85,9 @@ class TihuluDesktopApp:
         self.last_outputs: list[Path] = []
         self._drag_group_index: int | None = None
         self._drag_photo_indices: set[int] = set()
+        self._drag_photo_widget: Any | None = None
         self.selected_photo_indices: set[int] = set()
+        self._photo_selection_anchor: int | None = None
         self.thumbnail_images: list[Any] = []
         self.photo_tiles: list[Any] = []
         self._video_capture: Any = None
@@ -115,6 +117,7 @@ class TihuluDesktopApp:
         self.max_side = tk.StringVar(value=str(DEFAULT_MAX_SIDE))
         self.output_max_side = tk.StringVar(value="1600")
         self.keep_original_size = tk.BooleanVar(value=False)
+        self.keep_original_video_size = tk.BooleanVar(value=False)
         self.image_format = tk.StringVar(value="jpeg")
         self.video_format = tk.StringVar(value="mp4")
         self.output_name = tk.StringVar(value="tihulu-output")
@@ -124,6 +127,9 @@ class TihuluDesktopApp:
         self.result = tk.StringVar(value="No result yet")
 
         self._build_layout()
+        # Keep receiving the release even when the pointer leaves a thumbnail
+        # while it is being dragged over the Groups list.
+        self.root.bind_all("<ButtonRelease-1>", self._photo_drop, add="+")
         self.root.after(100, self._drain_events)
 
 
@@ -298,6 +304,8 @@ class TihuluDesktopApp:
             spin.grid(row=1, column=0, sticky="ew", pady=(6, 0))
             if label == "Output Max Side":
                 self.output_max_side_control = spin
+            elif label == "Video Max Side":
+                self.video_max_side_control = spin
             self.controls.append(spin)
 
         cell = self.ttk.Frame(frame, style="Panel.TFrame")
@@ -335,10 +343,17 @@ class TihuluDesktopApp:
             command=self._sync_output_size,
         )
         keep_original.grid(row=0, column=0, sticky="w")
-        self.ttk.Label(size_cell, text="Output Name").grid(row=1, column=0, sticky="w", pady=(6, 0))
+        keep_original_video = self.ttk.Checkbutton(
+            size_cell,
+            text="Keep Original Video Size",
+            variable=self.keep_original_video_size,
+            command=self._sync_output_size,
+        )
+        keep_original_video.grid(row=1, column=0, sticky="w", pady=(5, 0))
+        self.ttk.Label(size_cell, text="Output Name").grid(row=2, column=0, sticky="w", pady=(6, 0))
         output_name = self.ttk.Entry(size_cell, textvariable=self.output_name)
-        output_name.grid(row=2, column=0, sticky="ew", pady=(4, 0))
-        self.controls.extend([keep_original, output_name])
+        output_name.grid(row=3, column=0, sticky="ew", pady=(4, 0))
+        self.controls.extend([keep_original, keep_original_video, output_name])
 
     def _action_row(self, parent: Any, row: int) -> None:
         frame = self.ttk.Frame(parent, style="Panel.TFrame")
@@ -432,7 +447,7 @@ class TihuluDesktopApp:
         self.ttk.Button(photos_panel, text="Remove Selected", command=self.remove_selected_photos, style="Danger.TButton").grid(row=3, column=1, sticky="ew", pady=(8, 0), padx=(4, 0))
         self.ttk.Label(
             photos_panel,
-            text="Click cards to select. Drag selected cards onto a group to move them.",
+            text="Click a card to select. Ctrl/Command toggles cards; Shift selects a range. Drag selected cards onto a group to move them.",
             wraplength=250,
         ).grid(row=4, column=0, columnspan=2, sticky="ew", pady=(8, 0))
 
@@ -443,6 +458,10 @@ class TihuluDesktopApp:
         if hasattr(self, "output_max_side_control"):
             self.output_max_side_control.configure(
                 state="disabled" if self.keep_original_size.get() else "normal"
+            )
+        if hasattr(self, "video_max_side_control"):
+            self.video_max_side_control.configure(
+                state="disabled" if self.keep_original_video_size.get() else "normal"
             )
 
     def _group_drag_start(self, event: Any) -> None:
@@ -484,6 +503,7 @@ class TihuluDesktopApp:
         self.thumbnail_images = []
         self.photo_tiles = []
         self.selected_photo_indices = set()
+        self._photo_selection_anchor = None
         if not self.workspace.groups:
             self.photo_preview.configure(image="", text="Analyze groups to review photos.")
             self.photo_name.configure(text="")
@@ -494,7 +514,7 @@ class TihuluDesktopApp:
             for index, photo in enumerate(group.photos):
                 tile = self._photo_tile(photo.path, index)
                 self.photo_tiles.append(tile)
-                row, column = divmod(index, 3)
+                row, column = divmod(index, 2)
                 tile.grid(row=row, column=column, sticky="nsew", padx=4, pady=4)
                 self.photo_grid.columnconfigure(column, weight=1)
             self._show_photo(0, preserve_selection=True)
@@ -504,7 +524,7 @@ class TihuluDesktopApp:
 
     def _photo_tile(self, path: Path, index: int) -> Any:
         try:
-            image = self._photo_image(path, (116, 92))
+            image = self._photo_image(path, (180, 135))
         except Exception:
             image = None
         else:
@@ -514,9 +534,9 @@ class TihuluDesktopApp:
             image=image,
             text=path.name,
             compound="top",
-            width=16,
-            height=8 if image is not None else 6,
-            wraplength=116,
+            width=24,
+            height=12 if image is not None else 8,
+            wraplength=176,
             justify="center",
             bg=CYAN if index in self.selected_photo_indices else PANEL_STRONG,
             fg="#02040a" if index in self.selected_photo_indices else TEXT,
@@ -527,7 +547,6 @@ class TihuluDesktopApp:
         )
         tile.bind("<ButtonPress-1>", lambda event, item=index: self._photo_drag_start(event, item))
         tile.bind("<B1-Motion>", self._photo_drag_motion)
-        tile.bind("<ButtonRelease-1>", self._photo_drop)
         return tile
 
     def _sync_photo_grid_scroll(self, _event: Any = None) -> None:
@@ -545,32 +564,62 @@ class TihuluDesktopApp:
             )
 
     def _photo_drag_start(self, event: Any, index: int) -> None:
-        if index not in self.selected_photo_indices:
-            if event.state & 0x0004:
-                self.selected_photo_indices.add(index)
+        is_shift = bool(event.state & 0x0001)
+        # Ctrl on Linux/Windows and Command (Mod1/Mod2) on macOS.
+        is_toggle = bool(event.state & (0x0004 | 0x0008 | 0x0010))
+        if is_shift and self._photo_selection_anchor is not None:
+            first = min(self._photo_selection_anchor, index)
+            last = max(self._photo_selection_anchor, index)
+            selected_range = set(range(first, last + 1))
+            self.selected_photo_indices = (
+                self.selected_photo_indices | selected_range
+                if is_toggle
+                else selected_range
+            )
+        elif is_toggle:
+            if index in self.selected_photo_indices:
+                self.selected_photo_indices.remove(index)
             else:
-                self.selected_photo_indices = {index}
-            self._refresh_photo_tile_selection()
-            self._show_photo(index, preserve_selection=True)
+                self.selected_photo_indices.add(index)
+            self._photo_selection_anchor = index
+        else:
+            self.selected_photo_indices = {index}
+            self._photo_selection_anchor = index
+        self._refresh_photo_tile_selection()
+        self._show_photo(index, preserve_selection=True)
         self._drag_photo_indices = set(self.selected_photo_indices)
+        self._drag_photo_widget = event.widget
 
     def _photo_drag_motion(self, _event: Any) -> None:
         if self._drag_photo_indices:
+            if self._drag_photo_widget is not None:
+                try:
+                    self._drag_photo_widget.grab_set()
+                except self.tk.TclError:
+                    pass
             self.root.configure(cursor="fleur")
 
     def _photo_drop(self, event: Any) -> None:
         self.root.configure(cursor="")
         moving = sorted(self._drag_photo_indices)
         self._drag_photo_indices = set()
+        drag_widget = self._drag_photo_widget
+        self._drag_photo_widget = None
+        if drag_widget is not None:
+            try:
+                drag_widget.grab_release()
+            except self.tk.TclError:
+                pass
         if not moving or not self.workspace.groups:
             return
-        target_widget = self.root.winfo_containing(event.x_root, event.y_root)
-        while target_widget is not None and target_widget != self.group_list:
-            target_widget = target_widget.master
-        if target_widget != self.group_list:
+        group_left = self.group_list.winfo_rootx()
+        group_top = self.group_list.winfo_rooty()
+        group_right = group_left + self.group_list.winfo_width()
+        group_bottom = group_top + self.group_list.winfo_height()
+        if not (group_left <= event.x_root < group_right and group_top <= event.y_root < group_bottom):
             return
-        target = self.group_list.nearest(event.y_root - self.group_list.winfo_rooty())
-        if target < 0 or target == self.selected_group:
+        target = self.group_list.nearest(event.y_root - group_top)
+        if target < 0 or target >= len(self.workspace.groups) or target == self.selected_group:
             return
         self.workspace.move_photos(self.selected_group, moving, target)
         self.selected_group = target
@@ -803,7 +852,7 @@ class TihuluDesktopApp:
             "output_max_side": 0 if self.keep_original_size.get() else int(float(self.output_max_side.get())),
             "output_name": self._safe_output_name(self.output_name.get()),
             "fps": float(self.fps.get()),
-            "video_max_side": int(float(self.video_max_side.get())),
+            "video_max_side": 0 if self.keep_original_video_size.get() else int(float(self.video_max_side.get())),
             "video_quality_mbps": float(self.video_quality_mbps.get()),
             "max_side": int(float(self.max_side.get())),
             "time_metadata": self.time_metadata.get(),
@@ -934,31 +983,34 @@ class TihuluDesktopApp:
         guide = """PARAMETER GUIDE
 
 Threshold
-Higher values make grouping stricter. Lower values keep more visually similar photos together.
+0.30–0.38 is loose, 0.40–0.50 is balanced (0.42 default), and 0.55+ is strict and may split real sets.
 
 Min Matches
-The minimum number of matching visual features used to accept the same camera angle.
+12–18 accepts more possible matches, 18–30 is balanced, and 35+ is strict. The default is 18.
 
 Min Frames
-Groups smaller than this are skipped during trail and timelapse export.
+2 exports every usable pair. 8–20 avoids accidental tiny groups; 30+ is useful for longer timelapses.
 
 Feature Side
-Working resolution for grouping analysis. Larger values can improve matching but use more memory.
+640 is fast, 1000 is the balanced default, and 1400–2000 can find finer grouping clues but uses more memory.
 
 Time Window Hours
-Photos taken within this many hours are more likely to stay in the same group when Time Metadata is enabled.
+2–6 separates short sessions. 8–24 can keep an overnight shoot together across midnight when Time Metadata is on.
 
 Output Max Side
-Limits the longest edge of trail images. Enable Keep Original Size to export at source dimensions without output resizing.
+1200–1800 is good for sharing. 2400–3840 is sharper but slower and larger. Keep Original Size exports at source dimensions with no resizing or stretching.
 
 Image Format / JPEG Quality
-PNG is lossless and larger. JPEG is smaller; higher JPEG quality preserves more faint detail.
+JPEG is smaller for sharing; PNG is lossless and larger for later editing. JPEG 80–90 keeps files small; 92–100 preserves faint trails with larger files.
 
-Video Format / Video Max Side / FPS
-MP4 is broadly compatible. WebM uses VP9 when the installed OpenCV build supports it. FPS controls playback speed; Video Max Side limits resolution.
+Video Format / Video Max Side
+MP4 is broadly compatible. WebM uses VP9 when the installed OpenCV build supports it. Video Max Side 1080–1920 is good for sharing; 2160–3840 is sharper but slower. Keep Original Video Size uses source photo dimensions with no video resizing.
+
+FPS / Video Quality Mbps
+12–18 FPS feels calm, 24 is cinematic, and 30–60 is smoother but needs more frames. 4–8 Mbps works for previews, 10–20 is cleaner, and 25+ is best for 4K-style exports.
 
 Manual Review
-Analyze Groups first. You can rename, add, drag-reorder, move or remove photos, multi-select, navigate with arrow keys, and undo up to 50 edits. Export Edited writes only non-empty groups.
+Analyze Groups first. You can rename, add, drag-reorder, move or remove photos, select cards with Ctrl/Command or Shift, drag selected photo cards onto another group, navigate with arrow keys, and undo up to 50 edits. Export Edited writes only non-empty groups.
 
 Original photos are never modified.
 """
