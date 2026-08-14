@@ -86,6 +86,7 @@ class TihuluDesktopApp:
         self._drag_group_index: int | None = None
         self._drag_photo_indices: set[int] = set()
         self.selected_photo_indices: set[int] = set()
+        self._photo_selection_anchor: int | None = None
         self.thumbnail_images: list[Any] = []
         self.photo_tiles: list[Any] = []
         self._video_capture: Any = None
@@ -124,6 +125,9 @@ class TihuluDesktopApp:
         self.result = tk.StringVar(value="No result yet")
 
         self._build_layout()
+        # Keep receiving the release even when the pointer leaves a thumbnail
+        # while it is being dragged over the Groups list.
+        self.root.bind_all("<ButtonRelease-1>", self._photo_drop, add="+")
         self.root.after(100, self._drain_events)
 
 
@@ -484,6 +488,7 @@ class TihuluDesktopApp:
         self.thumbnail_images = []
         self.photo_tiles = []
         self.selected_photo_indices = set()
+        self._photo_selection_anchor = None
         if not self.workspace.groups:
             self.photo_preview.configure(image="", text="Analyze groups to review photos.")
             self.photo_name.configure(text="")
@@ -527,7 +532,6 @@ class TihuluDesktopApp:
         )
         tile.bind("<ButtonPress-1>", lambda event, item=index: self._photo_drag_start(event, item))
         tile.bind("<B1-Motion>", self._photo_drag_motion)
-        tile.bind("<ButtonRelease-1>", self._photo_drop)
         return tile
 
     def _sync_photo_grid_scroll(self, _event: Any = None) -> None:
@@ -545,13 +549,29 @@ class TihuluDesktopApp:
             )
 
     def _photo_drag_start(self, event: Any, index: int) -> None:
-        if index not in self.selected_photo_indices:
-            if event.state & 0x0004:
-                self.selected_photo_indices.add(index)
+        is_shift = bool(event.state & 0x0001)
+        # Ctrl on Linux/Windows and Command (Mod1/Mod2) on macOS.
+        is_toggle = bool(event.state & (0x0004 | 0x0008 | 0x0010))
+        if is_shift and self._photo_selection_anchor is not None:
+            first = min(self._photo_selection_anchor, index)
+            last = max(self._photo_selection_anchor, index)
+            selected_range = set(range(first, last + 1))
+            self.selected_photo_indices = (
+                self.selected_photo_indices | selected_range
+                if is_toggle
+                else selected_range
+            )
+        elif is_toggle:
+            if index in self.selected_photo_indices:
+                self.selected_photo_indices.remove(index)
             else:
-                self.selected_photo_indices = {index}
-            self._refresh_photo_tile_selection()
-            self._show_photo(index, preserve_selection=True)
+                self.selected_photo_indices.add(index)
+            self._photo_selection_anchor = index
+        else:
+            self.selected_photo_indices = {index}
+            self._photo_selection_anchor = index
+        self._refresh_photo_tile_selection()
+        self._show_photo(index, preserve_selection=True)
         self._drag_photo_indices = set(self.selected_photo_indices)
 
     def _photo_drag_motion(self, _event: Any) -> None:
@@ -564,13 +584,14 @@ class TihuluDesktopApp:
         self._drag_photo_indices = set()
         if not moving or not self.workspace.groups:
             return
-        target_widget = self.root.winfo_containing(event.x_root, event.y_root)
-        while target_widget is not None and target_widget != self.group_list:
-            target_widget = target_widget.master
-        if target_widget != self.group_list:
+        group_left = self.group_list.winfo_rootx()
+        group_top = self.group_list.winfo_rooty()
+        group_right = group_left + self.group_list.winfo_width()
+        group_bottom = group_top + self.group_list.winfo_height()
+        if not (group_left <= event.x_root < group_right and group_top <= event.y_root < group_bottom):
             return
-        target = self.group_list.nearest(event.y_root - self.group_list.winfo_rooty())
-        if target < 0 or target == self.selected_group:
+        target = self.group_list.nearest(event.y_root - group_top)
+        if target < 0 or target >= len(self.workspace.groups) or target == self.selected_group:
             return
         self.workspace.move_photos(self.selected_group, moving, target)
         self.selected_group = target
