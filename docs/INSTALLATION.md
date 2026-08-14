@@ -2,6 +2,8 @@
 
 Tihulu Star Trail provides native desktop installation for macOS and Debian-based Linux distributions such as Debian, Ubuntu, and Pop!_OS. The hosted browser app remains available without installation at <https://tihulu.github.io/tihulu-star-trail/>.
 
+Every native installation includes the same Manual Review workspace. Drag the dividers between **Groups**, **Photo Preview**, and **Group Photos** to resize those areas. **Thumbnails** can be turned off to show a faster filename-only list for large groups; selection, multi-selection, and drag-to-group movement remain available in both views. The thumbnail preference is remembered for the next launch.
+
 ## Supported Systems
 
 | System | Native desktop app | Installer |
