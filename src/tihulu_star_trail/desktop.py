@@ -88,6 +88,7 @@ class TihuluDesktopApp:
         self.root = root
         self.events: queue.Queue[tuple[str, Any]] = queue.Queue()
         self.worker: threading.Thread | None = None
+        self.cancel_requested = threading.Event()
         self.controls: list[Any] = []
         self.workspace = GroupWorkspace()
         self.selected_group = 0
@@ -476,13 +477,15 @@ class TihuluDesktopApp:
         self.manual_button = self.ttk.Button(frame, text="Manual Review", command=self.start_manual_review)
         self.export_button = self.ttk.Button(frame, text="Export Edited", command=self.export_edited)
         self.run_button = self.ttk.Button(frame, text="Run", command=self.run, style="Primary.TButton")
+        self.stop_button = self.ttk.Button(frame, text="Stop", command=self.stop_work, style="Danger.Compact.TButton", state="disabled")
         self.open_button = self.ttk.Button(frame, text="Open Output", command=self.open_output)
         self.scan_button.grid(row=0, column=1, padx=(0, 8))
         self.analyze_button.grid(row=0, column=2, padx=(0, 8))
         self.manual_button.grid(row=0, column=3, padx=(0, 8))
         self.export_button.grid(row=0, column=4, padx=(0, 8))
         self.open_button.grid(row=0, column=5, padx=(0, 8))
-        self.run_button.grid(row=0, column=6)
+        self.run_button.grid(row=0, column=6, padx=(0, 8))
+        self.stop_button.grid(row=0, column=7)
         self.controls.extend([self.scan_button, self.analyze_button, self.manual_button, self.export_button, self.run_button, self.open_button])
 
     def _build_review_tab(self, parent: Any) -> None:
@@ -1729,6 +1732,8 @@ class TihuluDesktopApp:
             return
 
         self._clear_log()
+        self.cancel_requested.clear()
+        self.stop_button.configure(state="normal")
         self._set_busy(True)
         self.state.set({"scan": "SCANNING", "analyze": "ANALYZING", "manual": "LOADING", "export": "EXPORTING"}.get(mode, "RUNNING"))
         self.result.set("Working...")
@@ -1747,6 +1752,17 @@ class TihuluDesktopApp:
         self.worker = threading.Thread(target=target, args=args, daemon=True)
         self.worker.start()
 
+    def stop_work(self) -> None:
+        if self.worker is not None and self.worker.is_alive():
+            self.cancel_requested.set()
+            self.stop_button.configure(state="disabled")
+            self._append_log("Stopping after the current frame…")
+
+    def _progress(self, message: str) -> None:
+        if self.cancel_requested.is_set():
+            raise InterruptedError("Stopped by user.")
+        self.events.put(("log", message))
+
     def _scan_worker(self, payload: dict[str, Any]) -> None:
         try:
             result = scan_images(payload)
@@ -1757,7 +1773,7 @@ class TihuluDesktopApp:
 
     def _run_worker(self, payload: dict[str, Any]) -> None:
         try:
-            result = execute_action(payload, progress=lambda message: self.events.put(("log", message)))
+            result = execute_action(payload, progress=self._progress)
         except Exception as error:
             self.events.put(("error", error))
         else:
@@ -1765,7 +1781,7 @@ class TihuluDesktopApp:
 
     def _analyze_worker(self, payload: dict[str, Any]) -> None:
         try:
-            groups = analyze_groups(payload, progress=lambda message: self.events.put(("log", message)))
+            groups = analyze_groups(payload, progress=self._progress)
         except Exception as error:
             self.events.put(("error", error))
         else:
@@ -1784,7 +1800,7 @@ class TihuluDesktopApp:
     def _export_worker(self, payload: dict[str, Any]) -> None:
         groups = self.workspace.nonempty_groups()
         try:
-            result = export_groups(groups, payload, progress=lambda message: self.events.put(("log", message)))
+            result = export_groups(groups, payload, progress=self._progress)
         except Exception as error:
             self.events.put(("error", error))
         else:
@@ -1797,7 +1813,7 @@ class TihuluDesktopApp:
                 payload,
                 trail=mode == "selected-trail",
                 timelapse=mode == "selected-timelapse",
-                progress=lambda message: self.events.put(("log", message)),
+                progress=self._progress,
             )
         except Exception as error:
             self.events.put(("error", error))
@@ -1866,11 +1882,15 @@ class TihuluDesktopApp:
                 self._render_workspace()
                 self._finish("READY", f"Loaded {len(payload)} photos into group_001 without analysis. Create groups, move frames, then export Trail or Timelapse.")
             elif kind == "error":
-                self._finish("ERROR", str(payload))
-                self._show_error(str(payload))
+                if isinstance(payload, InterruptedError):
+                    self._finish("STOPPED", "Stopped by user.")
+                else:
+                    self._finish("ERROR", str(payload))
+                    self._show_error(str(payload))
         self.root.after(100, self._drain_events)
 
     def _finish(self, state: str, result: str) -> None:
+        self.stop_button.configure(state="disabled")
         self.state.set(state)
         self.result.set(result)
         self._append_log(result)
@@ -1970,10 +1990,10 @@ Threshold
 0.30–0.38 is loose, 0.40–0.50 is balanced (0.42 default), and 0.55+ is strict and may split real sets.
 
 Min Matches
-12–18 accepts more possible matches, 18–30 is balanced, and 35+ is strict. The default is 18.
+How many recognizable details two photos must share before automatic analysis puts them in the same group. 18 is the balanced default. Lower (12–17) if one shoot is being split apart; raise (25–35+) if unrelated photos are being mixed together.
 
 Min Frames
-2 exports every usable pair. 8–20 avoids accidental tiny groups; 30+ is useful for longer timelapses.
+The minimum number of photos required to keep and export a detected group. 2 keeps every matching pair. Use 8–20 to ignore accidental tiny groups; 30+ is useful when you only want longer timelapses. Groups below this number are skipped.
 
 Feature Side
 640 is fast, 1000 is the balanced default, and 1400–2000 can find finer grouping clues but uses more memory.

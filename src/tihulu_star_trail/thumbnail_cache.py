@@ -138,5 +138,6 @@ def decode_thumbnail(path: Path, bounds: tuple[int, int]) -> object:
 
     with Image.open(path) as source:
         image = ImageOps.exif_transpose(source).convert("RGB")
-        image.thumbnail(bounds, Image.Resampling.LANCZOS)
-        return image.copy()
+        # A contain-style thumbnail turns panoramic frames into an almost
+        # invisible strip. Fill the fixed review-card area instead.
+        return ImageOps.fit(image, bounds, method=Image.Resampling.LANCZOS, centering=(0.5, 0.5))
