@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Tihulu Star Trail Web</title>
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="style.css?v=20260814-layout">
   </head>
   <body>
     <canvas id="starfield" aria-hidden="true"></canvas>
@@ -104,10 +104,6 @@
               <input id="imageQuality" type="number" min="1" max="100" step="1" value="95">
             </label>
             <label class="field">
-              <span>FPS</span>
-              <input id="fps" type="number" min="1" max="60" step="1" value="24">
-            </label>
-            <label class="field">
               <span>Video Max Side</span>
               <input id="videoMaxSide" type="number" min="320" max="7680" step="160" value="1920">
             </label>
@@ -116,17 +112,21 @@
               <span>Keep Original Video Size</span>
             </label>
             <label class="field">
-              <span>Video Format</span>
-              <select id="videoFormat">
-                <option value="video/webm">WebM</option>
-                <option value="video/mp4">MP4</option>
-              </select>
-              <p class="support-note" id="videoSupportNote" role="status" aria-live="polite"></p>
+              <span>FPS</span>
+              <input id="fps" type="number" min="1" max="60" step="1" value="24">
             </label>
             <label class="field">
               <span>Video Quality Mbps</span>
               <input id="videoQuality" type="number" min="0.5" max="50" step="0.5" value="8">
             </label>
+            <label class="field">
+              <span>Video Format</span>
+              <select id="videoFormat">
+                <option value="video/webm">WebM</option>
+                <option value="video/mp4">MP4</option>
+              </select>
+            </label>
+            <p class="support-note grid-note" id="videoSupportNote" role="status" aria-live="polite"></p>
             <label class="check-field">
               <input id="timeMetadata" type="checkbox">
               <span>Time Metadata</span>
@@ -230,6 +230,6 @@
 
       <section class="groups-panel" id="groupsPanel" aria-label="Detected groups"></section>
     </main>
-    <script src="app.js"></script>
+    <script src="app.js?v=20260814-layout"></script>
   </body>
 </html>
