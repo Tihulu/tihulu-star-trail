@@ -11,6 +11,8 @@ const timeMetadataToggle = document.querySelector("#timeMetadata");
 const timeWindowInput = document.querySelector("#timeWindowHours") || document.querySelector("#timeWindowMinutes");
 const maxSideInput = document.querySelector("#maxSide");
 const keepOriginalSizeToggle = document.querySelector("#keepOriginalSize");
+const videoMaxSideInput = document.querySelector("#videoMaxSide");
+const keepOriginalVideoSizeToggle = document.querySelector("#keepOriginalVideoSize");
 const logOutput = document.querySelector("#logOutput");
 const groupsPanel = document.querySelector("#groupsPanel");
 const groupTitle = document.querySelector("#groupTitle");
@@ -104,6 +106,8 @@ function settings() {
     imageQualityRatio: imageQuality / 100,
     imageExtension: imageFormat === "image/jpeg" ? "jpg" : "png",
     fps: Number(document.querySelector("#fps").value),
+    videoMaxSide: Number(videoMaxSideInput.value),
+    keepOriginalVideoSize: Boolean(keepOriginalVideoSizeToggle?.checked),
     videoFormat,
     videoExtension: videoFormat === "video/mp4" ? "mp4" : "webm",
     videoLabel: videoFormat === "video/mp4" ? "MP4" : "WebM",
@@ -125,9 +129,14 @@ function setBusy(busy) {
 }
 
 function updateOutputSizeControls() {
-  if (!maxSideInput || !keepOriginalSizeToggle) return;
-  maxSideInput.disabled = keepOriginalSizeToggle.checked;
-  maxSideInput.setAttribute("aria-disabled", keepOriginalSizeToggle.checked ? "true" : "false");
+  if (maxSideInput && keepOriginalSizeToggle) {
+    maxSideInput.disabled = keepOriginalSizeToggle.checked;
+    maxSideInput.setAttribute("aria-disabled", keepOriginalSizeToggle.checked ? "true" : "false");
+  }
+  if (videoMaxSideInput && keepOriginalVideoSizeToggle) {
+    videoMaxSideInput.disabled = keepOriginalVideoSizeToggle.checked;
+    videoMaxSideInput.setAttribute("aria-disabled", keepOriginalVideoSizeToggle.checked ? "true" : "false");
+  }
 }
 
 function setDownload(url, filename) {
@@ -424,7 +433,7 @@ timelapseButton.addEventListener("click", async () => {
     const outputUrl = URL.createObjectURL(outputBlob);
     setDownload(outputUrl, `tihulu-timelapse.${outputOptions.videoExtension}`);
     setVideoPreview(outputUrl, outputOptions, result.frameCount);
-    log(`Timelapse ${outputOptions.videoLabel} ready from ${result.frameCount} decoded frame(s) at ${requestedOptions.videoQualityMbps} Mbps. Use the player to seek, restart, or replay.${conversionNote}`);
+    log(`Timelapse ${outputOptions.videoLabel} ready from ${result.frameCount} decoded frame(s) at ${result.width}×${result.height} and ${requestedOptions.videoQualityMbps} Mbps. Use the player to seek, restart, or replay.${conversionNote}`);
   } catch (error) {
     log(error.message || error);
   } finally {
@@ -1553,7 +1562,13 @@ async function renderTimelapse(selected, options) {
     throw new Error("This browser cannot record canvas video.");
   }
   const firstFrame = await firstDecodedFrame(selected);
-  fitCanvas(previewCanvas, firstFrame.bitmap.width, firstFrame.bitmap.height, options.maxSide, options.keepOriginalSize);
+  fitCanvas(
+    previewCanvas,
+    firstFrame.bitmap.width,
+    firstFrame.bitmap.height,
+    options.videoMaxSide,
+    options.keepOriginalVideoSize
+  );
   const ctx = previewCanvas.getContext("2d");
   const stream = previewCanvas.captureStream(options.fps);
   const mimeType = supportedVideoMimeType(options.videoFormat);
@@ -1595,7 +1610,12 @@ async function renderTimelapse(selected, options) {
   recorder.stop();
   await done;
   stream.getTracks().forEach((track) => track.stop());
-  return {blob: new Blob(chunks, {type: mimeType}), frameCount};
+  return {
+    blob: new Blob(chunks, {type: mimeType}),
+    frameCount,
+    width: previewCanvas.width,
+    height: previewCanvas.height
+  };
 }
 
 async function firstDecodedFrame(selected) {
@@ -1748,6 +1768,7 @@ const CYAN = "#43f7ff";
 const PINK = "#ff2bd6";
 startStarfield();
 keepOriginalSizeToggle?.addEventListener("change", updateOutputSizeControls);
+keepOriginalVideoSizeToggle?.addEventListener("change", updateOutputSizeControls);
 updateOutputSizeControls();
 updateVideoFormatSupport();
 renderEditor();

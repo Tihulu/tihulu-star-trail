@@ -53,6 +53,10 @@
                 <dd>12-18 feels calm, 24 is cinematic, 30-60 is smoother but needs more frames.</dd>
               </div>
               <div>
+                <dt>Video Max Side</dt>
+                <dd>1080-1920 is good for sharing. 2160-3840 is sharper but slower and uses more memory. Turn Keep Original Video Size on to use the source photo dimensions with no video downscaling or stretching.</dd>
+              </div>
+              <div>
                 <dt>Video Format</dt>
                 <dd>WebM is fastest. Chromium and other browsers record MP4 directly when native MP4 is supported; otherwise MP4 records WebM first, then converts through FFmpeg WASM.</dd>
               </div>
@@ -102,6 +106,14 @@
             <label class="field">
               <span>FPS</span>
               <input id="fps" type="number" min="1" max="60" step="1" value="24">
+            </label>
+            <label class="field">
+              <span>Video Max Side</span>
+              <input id="videoMaxSide" type="number" min="320" max="7680" step="160" value="1920">
+            </label>
+            <label class="check-field">
+              <input id="keepOriginalVideoSize" type="checkbox">
+              <span>Keep Original Video Size</span>
             </label>
             <label class="field">
               <span>Video Format</span>
