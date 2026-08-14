@@ -73,6 +73,7 @@ def export_groups(
             image_format=str(payload.get("image_format", "jpeg")),
             max_side=_optional_max_side(int(payload.get("output_max_side", 0))),
             progress=progress,
+            hardware_mode=str(payload.get("hardware_acceleration", "auto")),
         )
         result["trails"] = [str(path) for path in trails]
     if bool(payload.get("timelapse", False)):
@@ -87,6 +88,7 @@ def export_groups(
             bitrate_mbps=_optional_float(payload.get("video_quality_mbps")),
             progress=progress,
             preserve_order=True,
+            hardware_mode=str(payload.get("hardware_acceleration", "auto")),
         )
         result["timelapses"] = [str(path) for path in videos]
     return result
@@ -117,6 +119,7 @@ def render_selected_group(
             image_format=str(payload.get("image_format", "jpeg")),
             max_side=_optional_max_side(int(payload.get("output_max_side", 0))),
             progress=progress,
+            hardware_mode=str(payload.get("hardware_acceleration", "auto")),
         )
         result["trails"] = [str(path) for path in trails]
     if timelapse:
@@ -131,6 +134,7 @@ def render_selected_group(
             bitrate_mbps=_optional_float(payload.get("video_quality_mbps")),
             progress=progress,
             preserve_order=True,
+            hardware_mode=str(payload.get("hardware_acceleration", "auto")),
         )
         result["timelapses"] = [str(path) for path in videos]
     return result
@@ -207,6 +211,7 @@ def execute_action(payload: dict[str, Any], progress: Progress | None = None) ->
                 image_format=str(payload.get("image_format", "jpeg")),
                 max_side=_optional_max_side(int(payload.get("output_max_side", 0))),
                 progress=progress,
+                hardware_mode=str(payload.get("hardware_acceleration", "auto")),
             )
             result["trails"] = [str(path) for path in trails]
             if bool(payload.get("timelapse", False)):
@@ -220,6 +225,7 @@ def execute_action(payload: dict[str, Any], progress: Progress | None = None) ->
                     video_format=str(payload.get("video_extension", "mp4")),
                     bitrate_mbps=_optional_float(payload.get("video_quality_mbps")),
                     progress=progress,
+                    hardware_mode=str(payload.get("hardware_acceleration", "auto")),
                 )
                 result["timelapses"] = [str(path) for path in videos]
         return result
@@ -234,6 +240,7 @@ def execute_action(payload: dict[str, Any], progress: Progress | None = None) ->
                 image_format=str(payload.get("image_format", "jpeg")),
                 max_side=_optional_max_side(int(payload.get("output_max_side", 0))),
                 progress=progress,
+                hardware_mode=str(payload.get("hardware_acceleration", "auto")),
             )
             return {"trails": [str(path) for path in trails]}
         paths = list_images(input_path, recursive=recursive)
@@ -247,6 +254,7 @@ def execute_action(payload: dict[str, Any], progress: Progress | None = None) ->
             jpeg_quality=jpeg_quality,
             max_side=_optional_max_side(int(payload.get("output_max_side", 0))),
             progress=progress,
+            hardware_mode=str(payload.get("hardware_acceleration", "auto")),
         )
         return {"trails": [str(trail)]}
 
@@ -262,6 +270,7 @@ def execute_action(payload: dict[str, Any], progress: Progress | None = None) ->
                 video_format=str(payload.get("video_extension", "mp4")),
                 bitrate_mbps=_optional_float(payload.get("video_quality_mbps")),
                 progress=progress,
+                hardware_mode=str(payload.get("hardware_acceleration", "auto")),
             )
             return {"timelapses": [str(path) for path in videos]}
         paths = list_images(input_path, recursive=recursive)
@@ -276,6 +285,7 @@ def execute_action(payload: dict[str, Any], progress: Progress | None = None) ->
             max_side=video_max_side,
             bitrate_mbps=_optional_float(payload.get("video_quality_mbps")),
             progress=progress,
+            hardware_mode=str(payload.get("hardware_acceleration", "auto")),
         )
         return {"timelapses": [str(video)]}
 

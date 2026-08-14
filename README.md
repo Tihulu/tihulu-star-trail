@@ -15,10 +15,14 @@ The grouping step uses OpenCV feature matching and a RANSAC homography check. In
 - Recursively scans an SD card or photo folder.
 - Opens a native Debian/Pop!_OS desktop app with `tihulu desktop`.
 - Opens the same native feature set as a macOS `.app`, including RAW processing, manual group review, previews, and timelapse playback.
-- Gives the native desktop app a manual group review workspace with draggable panel dividers, mouse-wheel scrolling, responsive compact controls, optional lazy-loaded group thumbnails, a responsive photo grid or lightweight filename-only list, an Edit mode for click-by-click multi-selection, visible selection states, drag-to-reorder timelapse frames (including multi-photo blocks), drag-to-group photo moves, group creation/renaming/reordering, 50-step undo, RAW-capable previews, edited-group export, and trail/timelapse export for only the selected group.
+- Gives the native desktop app a responsive three-pane Manual Review workspace with compact controls, 120×90 photo thumbnails, 48×36 group thumbnails, a filename-only mode, background visible-first decoding, and a strict 128-item/40 MB LRU thumbnail cache. **RAM** caching is enabled by default for faster navigation and can be disabled to retain only visible thumbnail references.
+- Preserves Edit multi-selection, clear selection states, drag-to-reorder timelapse frames (including multi-photo blocks), drag-to-group moves, group creation/renaming/reordering, 50-step Undo, RAW-capable previews, edited-group export, and trail/timelapse export for only the selected group without re-decoding cached cards during ordinary selection or reordering.
+- Adds **Auto / CPU / GPU** hardware acceleration selection. Auto safely uses packaged OpenCV CUDA/OpenCL support when available and beneficial; unavailable or failed GPU processing logs once and continues on CPU without requiring extra drivers or packages.
 - Lets native desktop timelapse export keep the photos' original resolution when **Keep Original Video Size** is selected.
 
 The same desktop review workspace is included in every native installation path: macOS DMG, macOS installer, Linux AppImage, and Debian/Pop!_OS installer.
+
+The pre-performance-optimization v0.1.7 source, setup guide, checksums, and verified release download helper remain under [`archive/v0.1.7/`](archive/v0.1.7/README.md). Original v0.1.7 DMGs and AppImage remain unchanged and downloadable from [GitHub Releases](https://github.com/Tihulu/tihulu-star-trail/releases/tag/v0.1.7).
 - Previews completed trail images and plays completed timelapses inside the native desktop app.
 - Lets native desktop users choose JPEG/PNG, MP4/WebM, output dimensions, original-size image export, video bitrate, and custom single-output names.
 - Keeps the local browser interface available with `tihulu ui`.

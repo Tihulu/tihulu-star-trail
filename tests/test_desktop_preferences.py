@@ -19,16 +19,22 @@ def test_thumbnail_preference_round_trips(tmp_path: Path) -> None:
     app.preferences_path = settings
     app.show_photo_thumbnails = BooleanPreference(False)
     app.show_group_thumbnails = BooleanPreference(True)
+    app.cache_thumbnails_in_ram = BooleanPreference(True)
+    app.hardware_acceleration = BooleanPreference("Auto")
 
     app._save_preferences()
 
     assert json.loads(settings.read_text(encoding="utf-8")) == {
         "show_photo_thumbnails": False,
         "show_group_thumbnails": True,
+        "cache_thumbnails_in_ram": True,
+        "hardware_acceleration": "Auto",
     }
     assert app._load_preferences() == {
         "show_photo_thumbnails": False,
         "show_group_thumbnails": True,
+        "cache_thumbnails_in_ram": True,
+        "hardware_acceleration": "Auto",
     }
 
 

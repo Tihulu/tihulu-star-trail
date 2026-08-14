@@ -2,7 +2,15 @@
 
 Tihulu Star Trail provides native desktop installation for macOS and Debian-based Linux distributions such as Debian, Ubuntu, and Pop!_OS. The hosted browser app remains available without installation at <https://tihulu.github.io/tihulu-star-trail/>.
 
-Every native installation includes the same Manual Review workspace. Drag the dividers between **Groups**, **Photo Preview**, and **Group Photos** to resize those areas; previews and compact controls reflow with the available width. The mouse wheel scrolls both group and photo browsers. **Thumbs** can be disabled independently for groups and photos to avoid decoding unnecessary previews; group thumbnails load only for visible rows, while the photo browser becomes a lightweight filename-only list. Use **Edit** to select or deselect multiple photos with ordinary clicks, then **Done** to drag the selection before or after another photo to set the timelapse sequence, or onto another group to move it. Multi-selected photos move as one block, and Undo restores the previous order. Thumbnail preferences are remembered for the next launch.
+Every native installation includes the same Manual Review workspace. Drag the dividers between **Groups**, **Photo Preview**, and **Group Photos** to resize those areas; previews, toolbars, buttons, labels, and thumbnail columns reflow with the available width. The mouse wheel scrolls both browsers and their narrow scrollbars no longer dominate the panels.
+
+Photo thumbnails are approximately 120×90 and group thumbnails are approximately 48×36. Both are decoded in background workers, visible cards are prioritized, and only downscaled images enter the cache. **RAM** cache is enabled by default and keeps at most 128 thumbnails / approximately 40 MB for faster navigation. Disable it to reduce memory use; only currently visible UI thumbnail references are then retained. **Photo Thumbs** and **Group Thumbs** can be disabled independently, with Photo Thumbs producing a compact filename-only list. These settings persist between launches.
+
+Use **Edit** to select or deselect multiple photos with ordinary clicks, then **Done** to drag the selection before or after another photo to set the timelapse sequence, or onto another group to move it. Multi-selected photos move as one block, Undo restores the previous order, and the native renderer uses that order unchanged. Trail stacking itself is order-independent, while moving or removing frames still changes the trail result.
+
+**Hardware Acceleration** offers Auto (default), CPU, and GPU. Auto uses a packaged CUDA/OpenCL backend only when the runtime reports it as available; otherwise it uses CPU. GPU mode also falls back safely to CPU if initialization or processing fails. No CUDA toolkit, Homebrew package, Python package, or separate GPU dependency is required. The compact status line and Monitor log show the active backend.
+
+Older releases remain available. The preserved pre-performance v0.1.7 snapshot and restore instructions are in [`archive/v0.1.7/`](../archive/v0.1.7/README.md), and its original packages remain unchanged on the [v0.1.7 GitHub Release](https://github.com/Tihulu/tihulu-star-trail/releases/tag/v0.1.7).
 
 ## Supported Systems
 
