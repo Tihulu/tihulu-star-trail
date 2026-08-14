@@ -4,6 +4,7 @@ const analyzeButton = document.querySelector("#analyzeButton");
 const manualReviewButton = document.querySelector("#manualReviewButton");
 const trailButton = document.querySelector("#trailButton");
 const timelapseButton = document.querySelector("#timelapseButton");
+const stopButton = document.querySelector("#stopButton");
 const videoFormatSelect = document.querySelector("#videoFormat");
 const videoSupportNote = document.querySelector("#videoSupportNote");
 const settingsInfoButton = document.querySelector("#settingsInfoButton");
@@ -56,6 +57,7 @@ let groups = [];
 let selectedGroup = 0;
 let selectedPhotoIndex = 0;
 let isBusy = false;
+let cancelRequested = false;
 let photoPreviewUrl = "";
 let photoPreviewFile = null;
 let canvasPreviewToken = 0;
@@ -127,12 +129,24 @@ function settings() {
 
 function setBusy(busy) {
   isBusy = busy;
+  if (!busy) cancelRequested = false;
   [fileInput, manualReviewButton, analyzeButton, trailButton, timelapseButton].forEach((node) => {
     node.disabled = busy;
   });
+  if (stopButton) stopButton.disabled = !busy;
   statusChip.textContent = busy ? "WORKING" : "BROWSER";
   renderEditor();
 }
+
+function throwIfCancelled() {
+  if (cancelRequested) throw new Error("Stopped by user.");
+}
+
+stopButton?.addEventListener("click", () => {
+  cancelRequested = true;
+  stopButton.disabled = true;
+  log("Stopping after the current frame…");
+});
 
 function updateOutputSizeControls() {
   if (maxSideInput && keepOriginalSizeToggle) {
@@ -585,6 +599,7 @@ async function groupPhotos(inputFiles, options) {
   const groupedFiles = Array.from(inputFiles);
   const signatures = [];
   for (const [index, file] of groupedFiles.entries()) {
+    throwIfCancelled();
     log(`[${index + 1}/${groupedFiles.length}] analyzing ${file.name}`);
     try {
       signatures.push({file, signature: await imageSignature(file, options.thumbSide)});
@@ -601,6 +616,7 @@ async function groupPhotos(inputFiles, options) {
 
   const detected = [];
   for (const item of signatures) {
+    throwIfCancelled();
     let best = null;
     let bestScore = -1;
     for (const group of detected) {
@@ -1679,6 +1695,7 @@ async function renderTrail(selected, options) {
   const tempCtx = temp.getContext("2d", {willReadFrequently: true});
 
   for (let index = firstFrame.index + 1; index < selected.length; index += 1) {
+    throwIfCancelled();
     log(`[${index + 1}/${selected.length}] stacking ${selected[index].name}`);
     let bitmap;
     try {
@@ -1807,6 +1824,7 @@ async function renderTimelapse(selected, options) {
     : null;
   nextFrame = decodeNext(index + 1);
   while (index < selected.length) {
+    throwIfCancelled();
     if (!bitmap) {
       index += 1;
       bitmap = nextFrame ? await nextFrame : null;
