@@ -1,6 +1,7 @@
 const fileInput = document.querySelector("#fileInput");
 const dropZone = document.querySelector("#dropZone");
 const analyzeButton = document.querySelector("#analyzeButton");
+const manualReviewButton = document.querySelector("#manualReviewButton");
 const trailButton = document.querySelector("#trailButton");
 const timelapseButton = document.querySelector("#timelapseButton");
 const videoFormatSelect = document.querySelector("#videoFormat");
@@ -43,6 +44,8 @@ const selectionCount = document.querySelector("#selectionCount");
 const selectionModeButton = document.querySelector("#selectionModeButton");
 const selectAllButton = document.querySelector("#selectAllButton");
 const clearSelectionButton = document.querySelector("#clearSelectionButton");
+const sortNameButton = document.querySelector("#sortNameButton");
+const sortDateButton = document.querySelector("#sortDateButton");
 const removeSelectedButton = document.querySelector("#removeSelectedButton");
 const photoStrip = document.querySelector("#photoStrip");
 
@@ -66,6 +69,7 @@ let dragPayload = null;
 let groupDragPayload = null;
 let suppressPhotoClick = false;
 let suppressGroupClick = false;
+const captureTimeCache = new WeakMap();
 
 const SIGNATURE_CELLS = 12;
 const MAX_UNDO_STATES = 50;
@@ -121,7 +125,7 @@ function settings() {
 
 function setBusy(busy) {
   isBusy = busy;
-  [fileInput, analyzeButton, trailButton, timelapseButton].forEach((node) => {
+  [fileInput, manualReviewButton, analyzeButton, trailButton, timelapseButton].forEach((node) => {
     node.disabled = busy;
   });
   statusChip.textContent = busy ? "WORKING" : "BROWSER";
@@ -396,6 +400,20 @@ analyzeButton.addEventListener("click", async () => {
   }
 });
 
+manualReviewButton.addEventListener("click", async () => {
+  if (!files.length) return log("Select photos first.");
+  pushUndo("start manual review");
+  groups = [createManualGroup({files: files.slice(), scores: files.map(() => 1)})];
+  selectedGroup = 0;
+  selectedPhotoIndex = 0;
+  selectedPhotoKeys.clear();
+  photoStripKey = "";
+  renderGroups();
+  renderEditor();
+  await previewCurrentPhoto();
+  log("Manual group ready without analysis. Add groups, select frames, move them, then export Trail or Timelapse.");
+});
+
 trailButton.addEventListener("click", async () => {
   const selected = activeFiles();
   if (!selected.length) return log("Select photos first.");
@@ -493,6 +511,14 @@ clearSelectionButton?.addEventListener("click", () => {
   clearSelectedPhotos();
 });
 
+sortNameButton?.addEventListener("click", () => {
+  void sortActiveGroup("name");
+});
+
+sortDateButton?.addEventListener("click", () => {
+  void sortActiveGroup("date");
+});
+
 removeSelectedButton?.addEventListener("click", async () => {
   await removeSelectedPhoto();
 });
@@ -546,9 +572,7 @@ document.addEventListener("keydown", (event) => {
 });
 
 async function groupPhotos(inputFiles, options) {
-  const groupedFiles = options.useTimeMetadata
-    ? Array.from(inputFiles).sort(compareFileTime)
-    : inputFiles;
+  const groupedFiles = Array.from(inputFiles);
   const signatures = [];
   for (const [index, file] of groupedFiles.entries()) {
     log(`[${index + 1}/${groupedFiles.length}] analyzing ${file.name}`);
@@ -560,6 +584,9 @@ async function groupPhotos(inputFiles, options) {
   }
   if (!signatures.length) {
     throw new Error("No browser-decodable photos found. Use JPEG/PNG/WebP/BMP/GIF/AVIF here, or use the Linux desktop/local app for RAW files.");
+  }
+  if (options.useTimeMetadata) {
+    signatures.sort((first, second) => compareCaptureTime(first.signature.capturedAt, second.signature.capturedAt, first.file, second.file));
   }
 
   const detected = [];
@@ -685,13 +712,13 @@ async function imageSignature(file, side) {
     meanLuma: meanLuma / 255,
     contrast: contrast / 255,
     aspect,
-    capturedAt: fileTime(file)
+    capturedAt: await captureTime(file)
   };
 }
 
-function compareFileTime(first, second) {
-  const firstTime = fileTime(first) ?? 0;
-  const secondTime = fileTime(second) ?? 0;
+function compareCaptureTime(firstTime, secondTime, first, second) {
+  firstTime ??= fileTime(first) ?? 0;
+  secondTime ??= fileTime(second) ?? 0;
   return firstTime - secondTime || first.name.localeCompare(second.name);
 }
 
@@ -701,11 +728,67 @@ function fileTime(file) {
     : null;
 }
 
+async function captureTime(file) {
+  if (captureTimeCache.has(file)) return captureTimeCache.get(file);
+  let value = fileTime(file);
+  if (/\.jpe?g$/i.test(file.name)) {
+    try {
+      value = parseJpegCaptureTime(await file.slice(0, 256 * 1024).arrayBuffer()) ?? value;
+    } catch (_error) {
+      // File modification time remains a useful fallback in browsers.
+    }
+  }
+  captureTimeCache.set(file, value);
+  return value;
+}
+
+function parseJpegCaptureTime(buffer) {
+  const view = new DataView(buffer);
+  if (view.byteLength < 12 || view.getUint16(0) !== 0xffd8) return null;
+  for (let offset = 2; offset + 10 < view.byteLength;) {
+    if (view.getUint8(offset) !== 0xff) break;
+    const marker = view.getUint8(offset + 1);
+    const length = view.getUint16(offset + 2);
+    if (length < 2 || offset + 2 + length > view.byteLength) break;
+    if (marker === 0xe1 && String.fromCharCode(...new Uint8Array(buffer, offset + 4, 6)) === "Exif\u0000\u0000") {
+      return parseExifDate(view, offset + 10, view.byteLength);
+    }
+    offset += 2 + length;
+  }
+  return null;
+}
+
+function parseExifDate(view, start, end) {
+  if (start + 8 > end) return null;
+  const little = view.getUint16(start) === 0x4949;
+  const word = (at) => view.getUint16(at, little);
+  const dword = (at) => view.getUint32(at, little);
+  if (word(start + 2) !== 42) return null;
+  const readIfd = (relative) => {
+    const at = start + relative;
+    if (at + 2 > end) return [];
+    const count = word(at);
+    return Array.from({length: Math.min(count, 64)}, (_, index) => at + 2 + index * 12).filter((entry) => entry + 12 <= end);
+  };
+  const root = readIfd(dword(start + 4));
+  const exif = root.find((entry) => word(entry) === 0x8769);
+  const entries = exif ? readIfd(dword(exif + 8)) : root;
+  const date = entries.find((entry) => [0x9003, 0x9004, 0x0132].includes(word(entry)));
+  if (!date) return null;
+  const count = dword(date + 4);
+  const relative = dword(date + 8);
+  const at = count <= 4 ? date + 8 : start + relative;
+  if (at < start || at + 19 > end) return null;
+  const value = String.fromCharCode(...new Uint8Array(view.buffer, at, Math.min(count, 32))).replace(/\0.*$/, "");
+  const match = value.match(/^(\d{4}):(\d{2}):(\d{2})\s+(\d{2}):(\d{2}):(\d{2})$/);
+  return match ? Date.UTC(+match[1], +match[2] - 1, +match[3], +match[4], +match[5], +match[6]) : null;
+}
+
 function timeCompatible(first, second, options) {
   if (!options.useTimeMetadata) return true;
   const firstTime = first?.capturedAt;
   const secondTime = second?.capturedAt;
-  if (!Number.isFinite(firstTime) || !Number.isFinite(secondTime)) return true;
+  if (!Number.isFinite(firstTime) || !Number.isFinite(secondTime)) return false;
   return Math.abs(firstTime - secondTime) <= options.timeWindowMs;
 }
 
@@ -1024,6 +1107,36 @@ function clearSelectedPhotos() {
   renderSelectionControls();
 }
 
+async function sortActiveGroup(mode) {
+  let group = activeGroup();
+  if (!group) {
+    if (!files.length) return;
+    groups = [createManualGroup({files: files.slice(), scores: files.map(() => 1)})];
+    selectedGroup = 0;
+    group = activeGroup();
+  }
+  if (!group || group.files.length < 2 || isBusy) return;
+  setBusy(true);
+  try {
+    const entries = group.files.map((file, index) => ({file, score: group.scores[index] ?? 1, index}));
+    if (mode === "date") {
+      await Promise.all(entries.map(async (entry) => { entry.time = await captureTime(entry.file); }));
+      entries.sort((a, b) => compareCaptureTime(a.time, b.time, a.file, b.file));
+    } else {
+      entries.sort((a, b) => a.file.name.localeCompare(b.file.name, undefined, {numeric: true, sensitivity: "base"}) || a.index - b.index);
+    }
+    pushUndo(`sort ${mode}`);
+    group.files = entries.map((entry) => entry.file);
+    group.scores = entries.map((entry) => entry.score);
+    selectedPhotoIndex = 0;
+    selectedPhotoKeys.clear();
+    refreshGroupsAfterEdit(`Sorted ${groupLabel(selectedGroup)} by ${mode}. This is now the timelapse frame order.`);
+    await previewCurrentPhoto();
+  } finally {
+    setBusy(false);
+  }
+}
+
 function setPhotoSelection(file, selected) {
   const key = fileKey(file);
   if (selected) selectedPhotoKeys.add(key);
@@ -1297,6 +1410,8 @@ function renderSelectionControls() {
   selectAllButton.disabled = isBusy || !activeFiles().length;
   clearSelectionButton.disabled = isBusy || !selectedCountValue;
   removeSelectedButton.disabled = isBusy || !selectedCountValue;
+  if (sortNameButton) sortNameButton.disabled = isBusy || activeFiles().length < 2;
+  if (sortDateButton) sortDateButton.disabled = isBusy || activeFiles().length < 2;
 }
 
 function renderPhotoStrip() {
@@ -1667,6 +1782,8 @@ async function renderTimelapse(selected, options) {
   const done = new Promise((resolve) => recorder.addEventListener("stop", resolve, {once: true}));
   recorder.start();
   let frameCount = 0;
+  const frameDuration = 1000 / options.fps;
+  const startedAt = performance.now();
   for (let index = firstFrame.index; index < selected.length; index += 1) {
     log(`[${index + 1}/${selected.length}] recording ${selected[index].name}`);
     let bitmap;
@@ -1684,7 +1801,9 @@ async function renderTimelapse(selected, options) {
     ctx.drawImage(bitmap, 0, 0, previewCanvas.width, previewCanvas.height);
     bitmap.close?.();
     frameCount += 1;
-    await delay(1000 / options.fps);
+    // Decode time used to be added to every frame delay, making output slower
+    // than the requested FPS. Pace against the intended timeline instead.
+    await delay(Math.max(0, startedAt + frameCount * frameDuration - performance.now()));
   }
   recorder.stop();
   await done;

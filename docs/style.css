@@ -600,9 +600,9 @@ button:disabled {
 }
 
 .photo-strip {
-  max-height: 250px;
+  max-height: 330px;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(82px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
   gap: 8px;
   overflow: auto;
   padding: 10px;
@@ -667,7 +667,7 @@ button:disabled {
 
 .photo-thumb img {
   width: 100%;
-  aspect-ratio: 1;
+  aspect-ratio: 4 / 3;
   display: block;
   object-fit: cover;
   border: 1px solid rgba(67, 247, 255, 0.18);
@@ -678,7 +678,7 @@ button:disabled {
 .photo-thumb span {
   min-height: 2.2em;
   color: var(--muted);
-  font-size: 0.68rem;
+  font-size: 0.78rem;
   font-weight: 800;
   line-height: 1.1;
   overflow-wrap: anywhere;

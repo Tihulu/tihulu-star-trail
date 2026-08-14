@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
+import re
 from typing import Iterable
 
 from .grouping import AngleGroup, AssignedPhoto
@@ -104,6 +105,30 @@ class GroupWorkspace:
         self.snapshot()
         self.groups[group_index].photos = reordered
         return list(range(insertion, insertion + len(moving)))
+
+    def sort_photos(self, group_index: int, mode: str) -> None:
+        """Apply an explicit timelapse order; later drag reordering remains authoritative."""
+        photos = self.groups[group_index].photos
+        if len(photos) < 2:
+            return
+        if mode == "date":
+            def key(photo: AssignedPhoto) -> tuple[float, str]:
+                if photo.captured_at is not None:
+                    return (photo.captured_at.timestamp(), photo.path.name.casefold())
+                try:
+                    return (photo.path.stat().st_mtime, photo.path.name.casefold())
+                except OSError:
+                    return (0.0, photo.path.name.casefold())
+        else:
+            def key(photo: AssignedPhoto) -> tuple[object, ...]:
+                return tuple(
+                    int(part) if part.isdigit() else part.casefold()
+                    for part in re.split(r"(\d+)", photo.path.name)
+                )
+        ordered = sorted(photos, key=key)
+        if ordered != photos:
+            self.snapshot()
+            self.groups[group_index].photos = ordered
 
     def remove_photos(self, group_index: int, photo_indices: Iterable[int]) -> None:
         selected = set(photo_indices)
