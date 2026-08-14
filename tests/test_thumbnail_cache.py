@@ -5,6 +5,7 @@ from tihulu_star_trail.thumbnail_cache import (
     ThumbnailGeneration,
     prune_invisible_references,
     thumbnail_key,
+    decode_thumbnail,
 )
 from tihulu_star_trail.desktop_groups import EditableGroup, GroupWorkspace, assigned_photo
 
@@ -51,6 +52,15 @@ def test_ram_cache_off_keeps_only_visible_ui_references() -> None:
 
     assert removed == [0, 2]
     assert references == {1: "second"}
+
+
+def test_panorama_thumbnail_fills_the_review_card(tmp_path: Path) -> None:
+    from PIL import Image
+
+    source = tmp_path / "panorama.jpg"
+    Image.new("RGB", (1200, 100), "white").save(source)
+
+    assert decode_thumbnail(source, (180, 135)).size == (180, 135)
 
 
 def test_cache_cleanup_does_not_change_group_order_or_undo_history() -> None:
