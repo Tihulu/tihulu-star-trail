@@ -4,6 +4,7 @@ const logOutput = document.querySelector("#logOutput");
 const jobTitle = document.querySelector("#jobTitle");
 const jobState = document.querySelector("#jobState");
 const resultGrid = document.querySelector("#resultGrid");
+const interactionUrl = "https://www.instagram.com/world_of_31";
 let pollTimer = null;
 
 function payload() {
@@ -105,12 +106,16 @@ scanButton.addEventListener("click", async () => {
 
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
+  const request = payload();
+  if (request.fps === 31 && (request.action === "group" || request.action === "timelapse")) {
+    window.open(interactionUrl, "_blank", "noopener,noreferrer");
+  }
   try {
     setBusy(true);
     resultGrid.innerHTML = "";
     jobState.textContent = "QUEUED";
     writeLog(["Submitting job..."]);
-    const data = await postJson("/api/run", payload());
+    const data = await postJson("/api/run", request);
     await poll(data.job_id);
     pollTimer = setInterval(() => poll(data.job_id).catch((error) => {
       clearInterval(pollTimer);
