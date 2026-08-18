@@ -93,21 +93,8 @@ jobs:
           python-version: "3.12"
           cache: pip
 
-      - name: Install Linux system dependencies
-        timeout-minutes: 8
-        env:
-          DEBIAN_FRONTEND: noninteractive
-        run: |
-          sudo apt-get \
-            -o Acquire::Retries=3 \
-            -o Acquire::http::Timeout=30 \
-            -o Acquire::https::Timeout=30 \
-            update
-          sudo apt-get \
-            -o Acquire::Retries=3 \
-            -o Acquire::http::Timeout=30 \
-            -o Acquire::https::Timeout=30 \
-            install -y --no-install-recommends python3-tk libfuse2
+      - name: Verify Tk runtime
+        run: python -c "import tkinter; print(f'Tk {tkinter.TkVersion}')"
 
       - name: Install Python build dependencies
         timeout-minutes: 8
@@ -119,12 +106,12 @@ jobs:
       - name: Smoke-test AppImage
         run: |
           appimage=$(find release-dist -name '*.AppImage' -print -quit)
-          TIHULU_DESKTOP_CHECK=1 "$appimage"
+          APPIMAGE_EXTRACT_AND_RUN=1 TIHULU_DESKTOP_CHECK=1 "$appimage"
 
       - name: Verify packaged FFmpeg video export dependency
         run: |
           appimage=$(find release-dist -name '*.AppImage' -print -quit)
-          TIHULU_FFMPEG_CHECK=1 TIHULU_REQUIRE_BUNDLED_FFMPEG=1 "$appimage"
+          APPIMAGE_EXTRACT_AND_RUN=1 TIHULU_FFMPEG_CHECK=1 TIHULU_REQUIRE_BUNDLED_FFMPEG=1 "$appimage"
 
       - name: Smoke-test FUSE-free launcher
         run: |
