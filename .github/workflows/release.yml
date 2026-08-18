@@ -6,6 +6,7 @@ on:
       - ".github/workflows/release.yml"
       - "linux/**"
       - "macos/**"
+      - "windows/**"
       - "release/**"
       - "src/**"
       - "pyproject.toml"
@@ -112,12 +113,62 @@ jobs:
             release-dist/*-no-fuse.sh
           if-no-files-found: error
 
+  windows-exe:
+    name: Windows EXE (x86_64)
+    runs-on: windows-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install build dependencies
+        run: python -m pip install ".[release]"
+
+      - name: Build Windows executable
+        shell: powershell
+        run: .\windows\build.ps1
+
+      - name: Smoke-test packaged app
+        shell: powershell
+        run: |
+          $exe = (Get-ChildItem release-dist -Filter "*windows-x86_64.exe" | Select-Object -First 1).FullName
+          if (-not $exe) { throw "Windows release executable was not found." }
+          $env:TIHULU_DESKTOP_CHECK = "1"
+          $process = Start-Process -FilePath $exe -Wait -PassThru
+          Remove-Item Env:TIHULU_DESKTOP_CHECK -ErrorAction SilentlyContinue
+          if ($process.ExitCode -ne 0) { throw "Desktop dependency smoke test failed with exit code $($process.ExitCode)." }
+
+      - name: Verify packaged FFmpeg video export dependency
+        shell: powershell
+        run: |
+          $exe = (Get-ChildItem release-dist -Filter "*windows-x86_64.exe" | Select-Object -First 1).FullName
+          if (-not $exe) { throw "Windows release executable was not found." }
+          $env:TIHULU_FFMPEG_CHECK = "1"
+          $env:TIHULU_REQUIRE_BUNDLED_FFMPEG = "1"
+          $process = Start-Process -FilePath $exe -Wait -PassThru
+          Remove-Item Env:TIHULU_FFMPEG_CHECK -ErrorAction SilentlyContinue
+          Remove-Item Env:TIHULU_REQUIRE_BUNDLED_FFMPEG -ErrorAction SilentlyContinue
+          if ($process.ExitCode -ne 0) { throw "Bundled FFmpeg smoke test failed with exit code $($process.ExitCode)." }
+
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-windows-x86_64
+          path: release-dist/*windows-x86_64.exe
+          if-no-files-found: error
+
   publish:
     name: Publish GitHub Release
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     needs:
       - macos-dmg
       - linux-appimage
+      - windows-exe
     runs-on: ubuntu-latest
     permissions:
       contents: write
