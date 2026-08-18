@@ -5,9 +5,12 @@ import sys
 
 from tihulu_star_trail.desktop import check_desktop_dependencies, launch_desktop
 from tihulu_star_trail.stacker import check_video_dependencies
+from tihulu_star_trail.windows_runtime import configure_windows_runtime
 
 
 def main() -> int:
+    configure_windows_runtime()
+
     if os.environ.get("TIHULU_DESKTOP_CHECK") == "1":
         check_desktop_dependencies()
         print("Tihulu packaged desktop dependencies are available.")
