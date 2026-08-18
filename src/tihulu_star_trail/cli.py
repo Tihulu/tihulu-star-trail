@@ -14,6 +14,7 @@ from .defaults import (
 )
 from .images import list_images
 from .organizer import materialize_groups
+from .windows_runtime import configure_windows_runtime, default_link_mode
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -118,7 +119,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     desktop = subcommands.add_parser(
         "desktop",
-        help="launch the native macOS or Linux desktop app",
+        help="launch the native Windows, macOS, or Linux desktop app",
     )
     desktop.add_argument(
         "--check",
@@ -195,7 +196,7 @@ def add_output_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--link-mode",
         choices=("symlink", "copy", "hardlink", "none"),
-        default="symlink",
+        default=default_link_mode(),
         help="how grouped photos are represented in the output folder",
     )
 
@@ -399,6 +400,8 @@ def ui_command(args: argparse.Namespace) -> int:
 
 
 def desktop_command(args: argparse.Namespace) -> int:
+    configure_windows_runtime()
+
     from .desktop import check_desktop_dependencies, launch_desktop
 
     if args.check:
@@ -442,6 +445,11 @@ def _dependency_error(error: ModuleNotFoundError) -> str:
         "_tkinter": "python3-tk tk-dev",
     }
     apt_name = apt_names.get(package)
+    if sys.platform == "win32" and package in {"tkinter", "_tkinter"}:
+        return (
+            f"tihulu: missing dependency {package!r}. On Windows, reinstall Python "
+            "with the Tcl/Tk component enabled."
+        )
     if sys.platform == "darwin" and package in {"tkinter", "_tkinter"}:
         return (
             f"tihulu: missing dependency {package!r}. On macOS, run: "
