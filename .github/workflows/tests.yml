@@ -21,8 +21,8 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v6
 
-      - name: Install Debian image packages
-        timeout-minutes: 8
+      - name: Install Linux desktop runtime
+        timeout-minutes: 5
         env:
           DEBIAN_FRONTEND: noninteractive
         run: |
@@ -36,16 +36,22 @@ jobs:
             -o Acquire::http::Timeout=30 \
             -o Acquire::https::Timeout=30 \
             install -y --no-install-recommends \
-            python3 python3-venv python3-pip python3-opencv python3-numpy \
-            python3-pillow python3-pytest python3-tk tk-dev xdg-utils
+            python3-venv python3-tk xdg-utils
 
-      - name: Install project
+      - name: Cache Python packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('pyproject.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install project and test dependencies
         timeout-minutes: 8
         run: |
-          python3 -m venv --system-site-packages .venv
+          python3 -m venv .venv
           . .venv/bin/activate
-          python -m pip install rawpy
-          python -m pip install -e . --no-deps
+          python -m pip install -e ".[dev,video]"
 
       - name: Check browser JavaScript
         run: |
@@ -57,6 +63,7 @@ jobs:
       - name: Check desktop dependencies
         run: |
           . .venv/bin/activate
+          python -c "import tkinter; print(f'Tk {tkinter.TkVersion}')"
           tihulu desktop --check
 
       - name: Run tests
