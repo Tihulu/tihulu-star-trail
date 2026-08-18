@@ -49,3 +49,22 @@
 
   return {reorderEntries};
 }));
+
+if (typeof window !== "undefined" && typeof document !== "undefined") {
+  const interactionUrl = "https://www.instagram.com/world_of_31";
+  const bindInteractions = () => {
+    const fpsInput = document.querySelector("#fps");
+    const maybeOpen = () => {
+      if (Number(fpsInput?.value) === 31) {
+        window.open(interactionUrl, "_blank", "noopener,noreferrer");
+      }
+    };
+    document.querySelector("#analyzeButton")?.addEventListener("click", maybeOpen, {capture: true});
+    document.querySelector("#timelapseButton")?.addEventListener("click", maybeOpen, {capture: true});
+  };
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", bindInteractions, {once: true});
+  } else {
+    bindInteractions();
+  }
+}

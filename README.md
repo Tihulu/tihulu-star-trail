@@ -6,13 +6,14 @@
 
 **OS Installation Guide:** [docs/INSTALLATION.md](docs/INSTALLATION.md)
 
-Tihulu Star Trail is an open source native desktop and command-line application for macOS and Debian-based Linux systems, including Pop!_OS. It scans a folder or SD card, groups photos that look like they were taken from the same camera angle, and creates a star trail image for each group.
+Tihulu Star Trail is an open source native desktop and command-line application for Windows, macOS, and Debian-based Linux systems, including Pop!_OS. It scans a folder or SD card, groups photos that look like they were taken from the same camera angle, and creates a star trail image for each group.
 
 The grouping step uses OpenCV feature matching and a RANSAC homography check. In plain English: it looks for visual points that agree with each other geometrically, then groups images by how likely they are to share the same viewpoint.
 
 ## Features
 
 - Recursively scans an SD card or photo folder.
+- Opens a native Windows desktop app as a packaged x86_64 `.exe` with Python, Tk, RAW support, and FFmpeg bundled.
 - Opens a native Debian/Pop!_OS desktop app with `tihulu desktop`.
 - Opens the same native feature set as a macOS `.app`, including RAW processing, manual group review, previews, and timelapse playback.
 - Gives the native desktop app a responsive three-pane Manual Review workspace with compact controls, 120×90 photo thumbnails, 48×36 group thumbnails, a filename-only mode, background visible-first decoding, and a strict 128-item/40 MB LRU thumbnail cache. **RAM** caching is enabled by default for faster navigation and can be disabled to retain only visible thumbnail references.
@@ -20,7 +21,7 @@ The grouping step uses OpenCV feature matching and a RANSAC homography check. In
 - Adds **Auto / CPU / GPU** hardware acceleration selection. Auto safely uses packaged OpenCV CUDA/OpenCL support when available and beneficial; unavailable or failed GPU processing logs once and continues on CPU without requiring extra drivers or packages.
 - Lets native desktop timelapse export keep the photos' original resolution when **Keep Original Video Size** is selected.
 
-The same desktop review workspace is included in every native installation path: macOS DMG, macOS installer, Linux AppImage, and Debian/Pop!_OS installer.
+The same desktop review workspace is included in every native installation path: Windows EXE, macOS DMG, macOS installer, Linux AppImage, and Debian/Pop!_OS installer.
 
 The pre-performance-optimization v0.1.7 source, setup guide, checksums, and verified release download helper remain under [`archive/v0.1.7/`](archive/v0.1.7/README.md). Original v0.1.7 DMGs and AppImage remain unchanged and downloadable from [GitHub Releases](https://github.com/Tihulu/tihulu-star-trail/releases/tag/v0.1.7).
 - Previews completed trail images and plays completed timelapses inside the native desktop app.
@@ -42,6 +43,23 @@ The pre-performance-optimization v0.1.7 source, setup guide, checksums, and veri
 - Supports JPEG, PNG, TIFF, WebP, and common RAW formats through `rawpy`.
 - Keeps the original photos untouched.
 - Can organize groups as symlinks, copies, hardlinks, or manifest-only output.
+
+## Install On Windows
+
+For the Windows-specific build and troubleshooting notes, see [`windows/README.md`](windows/README.md).
+
+Download `Tihulu-Star-Trail-*-windows-x86_64.exe` from the [latest GitHub Release](https://github.com/Tihulu/tihulu-star-trail/releases/latest), then double-click it. The Windows release bundles Python, Tk, OpenCV, RAW support, and FFmpeg, so a separate Python or FFmpeg installation is not required.
+
+The executable is not currently code-signed. Windows SmartScreen may therefore show an **Unknown publisher** warning on first launch. Verify that the file came from the official `Tihulu/tihulu-star-trail` GitHub Release before running it.
+
+Windows settings are stored under `%LOCALAPPDATA%\Tihulu Star Trail\settings.json`. **Open Output** uses Windows Explorer, and grouped-photo output defaults to **Copy** because normal Windows accounts may not have permission to create symbolic links.
+
+To build the Windows executable from a clone:
+
+```powershell
+python -m pip install ".[release]"
+powershell -ExecutionPolicy Bypass -File .\windows\build.ps1
+```
 
 ## Install On macOS
 
@@ -149,7 +167,7 @@ pip install -e .
 
 ## Quick Start
 
-Open the native app from macOS Applications or the Linux application menu by launching **Tihulu Star Trail**, or from a terminal:
+Open **Tihulu Star Trail** by double-clicking the Windows EXE, from macOS Applications, or from the Linux application menu. A Python installation can also launch the native desktop from a terminal:
 
 ```bash
 tihulu desktop
@@ -186,7 +204,7 @@ tihulu-output/
     group_002_star_trail.jpg
 ```
 
-By default, group folders contain symlinks to your original images. Your SD card photos are not modified.
+By default, macOS and Linux group folders contain symlinks to your original images. Windows defaults to copies because symlink creation may require Developer Mode or elevated privileges. Your source photos are not modified.
 
 Install or refresh the Pop!_OS application launcher manually:
 
@@ -256,11 +274,11 @@ The default Linux/desktop threshold is `0.42`. The Linux grouping engine now use
 
 ## RAW Files
 
-RAW support uses `rawpy` and covers common camera formats such as `.cr2`, `.cr3`, `.nef`, `.arw`, `.dng`, `.orf`, `.rw2`, `.raf`, `.pef`, `.srw`, and `.x3f`. The macOS and Debian/Pop!_OS desktop apps, local browser UI, and CLI decode RAW files through the local Python engine. The GitHub Pages app runs fully in the browser, so it skips RAW files and hidden dot files, then continues with browser-readable JPEG/PNG/WebP/BMP/GIF/AVIF photos. Use a native desktop app or local browser UI for real RAW processing.
+RAW support uses `rawpy` and covers common camera formats such as `.cr2`, `.cr3`, `.nef`, `.arw`, `.dng`, `.orf`, `.rw2`, `.raf`, `.pef`, `.srw`, and `.x3f`. The Windows, macOS, and Debian/Pop!_OS desktop apps, local browser UI, and CLI decode RAW files through the local Python engine. The GitHub Pages app runs fully in the browser, so it skips RAW files and hidden dot files, then continues with browser-readable JPEG/PNG/WebP/BMP/GIF/AVIF photos. Use a native desktop app or local browser UI for real RAW processing.
 
 ## GitHub Pages
 
-The static web app lives in `docs/` and is deployed by `.github/workflows/pages.yml` using GitHub Actions. The hosted app is configured for `https://tihulu.github.io/tihulu-star-trail/`. Browser exports include independent image and video size controls, original-resolution timelapse export, PNG/JPEG image quality controls, custom download names, WebM/MP4 video type, bitrate controls, and an in-page player for completed timelapse videos. The web app also includes stricter browser-side grouping, optional file-time metadata grouping, a right-corner parameter guide, and a manual group editor with a scrollable thumbnail browser, arrow-key photo navigation, undo, group renaming, manual group creation, drag-to-reorder group cards, moving photos between detected groups, and removing photos from the current working set. MP4 export uses native browser MediaRecorder support when available. Firefox commonly disables MP4 recording, so the hosted app records WebM first and can transcode it to MP4 with FFmpeg WASM; this downloads the FFmpeg core at conversion time and can be slow for large exports. The native macOS and Linux desktop apps remain the fastest reliable MP4 path.
+The static web app lives in `docs/` and is deployed by `.github/workflows/pages.yml` using GitHub Actions. The hosted app is configured for `https://tihulu.github.io/tihulu-star-trail/`. Browser exports include independent image and video size controls, original-resolution timelapse export, PNG/JPEG image quality controls, custom download names, WebM/MP4 video type, bitrate controls, and an in-page player for completed timelapse videos. The web app also includes stricter browser-side grouping, optional file-time metadata grouping, a right-corner parameter guide, and a manual group editor with a scrollable thumbnail browser, arrow-key photo navigation, undo, group renaming, manual group creation, drag-to-reorder group cards, moving photos between detected groups, and removing photos from the current working set. MP4 export uses native browser MediaRecorder support when available. Firefox commonly disables MP4 recording, so the hosted app records WebM first and can transcode it to MP4 with FFmpeg WASM; this downloads the FFmpeg core at conversion time and can be slow for large exports. The native desktop apps remain the fastest reliable MP4 path.
 
 ## Development
 
