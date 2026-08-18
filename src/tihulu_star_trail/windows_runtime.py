@@ -24,7 +24,10 @@ def windows_preferences_path(
 
 
 def configure_windows_runtime() -> None:
-    """Apply Windows-specific desktop behavior without changing macOS/Linux paths."""
+    """Apply shared desktop behavior, then Windows-specific integration when needed."""
+    from .desktop_runtime import install_desktop_runtime
+
+    install_desktop_runtime()
     if sys.platform != "win32":
         return
 
