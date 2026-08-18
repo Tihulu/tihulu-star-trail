@@ -15,7 +15,7 @@ $IconPath = Join-Path $BuildRoot "tihulu-star-trail.ico"
 Remove-Item -Recurse -Force $BuildRoot -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Force -Path $BuildRoot, $DistRoot, $SpecRoot, $WorkRoot | Out-Null
 
-& $Python -c "from PIL import Image; image=Image.open(r'assets/tihulu-star-trail.png').convert('RGBA'); image.save(r'$IconPath', format='ICO', sizes=[(16,16),(32,32),(48,48),(64,64),(128,128),(256,256)])"
+& $Python -c "from PIL import Image; image=Image.open(r'src/tihulu_star_trail/assets/tihulu-star-trail.png').convert('RGBA'); image.save(r'$IconPath', format='ICO', sizes=[(16,16),(32,32),(48,48),(64,64),(128,128),(256,256)])"
 if ($LASTEXITCODE -ne 0) { throw "Could not create the Windows icon." }
 
 $Version = (& $Python -c "import tihulu_star_trail; print(tihulu_star_trail.__version__)").Trim()
